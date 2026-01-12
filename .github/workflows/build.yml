@@ -34,31 +34,38 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Setup Gradle Wrapper
-      run: |
-        if [ ! -f "./gradlew" ]; then
-          echo "Gradle Wrapper não encontrado. Gerando..."
-          gradle wrapper --gradle-version 8.2
-        fi
-        chmod +x ./gradlew
-      
-    - name: Cache Gradle dependencies
-      uses: actions/cache@v4
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
       with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
+        gradle-version: 8.2
+      
+    - name: Make gradlew executable
+      if: hashFiles('gradlew') != ''
+      run: chmod +x ./gradlew
+      
+    - name: Generate Gradle Wrapper if missing
+      if: hashFiles('gradlew') == ''
+      run: |
+        gradle wrapper --gradle-version 8.2 --distribution-type bin
+        chmod +x ./gradlew
       
     - name: Build debug APK
       if: github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' || github.event.inputs.build_type == ''
-      run: ./gradlew assembleDebug --stacktrace
+      run: |
+        if [ -f "./gradlew" ]; then
+          ./gradlew assembleDebug --stacktrace
+        else
+          gradle assembleDebug --stacktrace
+        fi
       
     - name: Build release APK
       if: github.event.inputs.build_type == 'release' || github.event.inputs.build_type == 'both' || github.event_name != 'workflow_dispatch'
-      run: ./gradlew assembleRelease --stacktrace
+      run: |
+        if [ -f "./gradlew" ]; then
+          ./gradlew assembleRelease --stacktrace
+        else
+          gradle assembleRelease --stacktrace
+        fi
       continue-on-error: true
       
     - name: Upload debug APK
