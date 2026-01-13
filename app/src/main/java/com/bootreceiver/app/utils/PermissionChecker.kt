@@ -71,20 +71,22 @@ class PermissionChecker(private val context: Context) {
      */
     fun isSystemOptimized(): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // OPSTR_RUN_IN_BACKGROUND está disponível a partir do Android 8.0 (API 26)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val appOpsManager = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
                 appOpsManager?.let {
-                    // OPSTR_RUN_IN_BACKGROUND está disponível a partir do Android 8.0 (API 26)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val mode = it.checkOpNoThrow(
-                            AppOpsManager.OPSTR_RUN_IN_BACKGROUND,
-                            android.os.Process.myUid(),
-                            context.packageName
-                        )
-                        mode != AppOpsManager.MODE_ALLOWED
-                    } else {
-                        false
+                    // Usa reflection para acessar a constante que pode não estar disponível no compileSdk
+                    val opStr = try {
+                        AppOpsManager::class.java.getField("OPSTR_RUN_IN_BACKGROUND").get(null) as String
+                    } catch (e: Exception) {
+                        "android:run_in_background" // Fallback para string literal
                     }
+                    val mode = it.checkOpNoThrow(
+                        opStr,
+                        android.os.Process.myUid(),
+                        context.packageName
+                    )
+                    mode != AppOpsManager.MODE_ALLOWED
                 } ?: false
             } else {
                 false
