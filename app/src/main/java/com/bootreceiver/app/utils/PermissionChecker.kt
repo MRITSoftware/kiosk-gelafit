@@ -51,8 +51,15 @@ class PermissionChecker(private val context: Context) {
      */
     fun isBatteryOptimized(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            !powerManager.isIgnoringBatteryOptimizations(context.packageName)
+            try {
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                powerManager?.let {
+                    !it.isIgnoringBatteryOptimizations(context.packageName)
+                } ?: false
+            } catch (e: Exception) {
+                Log.w(TAG, "Erro ao verificar otimização de bateria: ${e.message}")
+                false
+            }
         } else {
             false // Android < 6.0 não tem otimização de bateria
         }
@@ -65,13 +72,20 @@ class PermissionChecker(private val context: Context) {
     fun isSystemOptimized(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val appOpsManager = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-                val mode = appOpsManager.checkOpNoThrow(
-                    AppOpsManager.OPSTR_RUN_IN_BACKGROUND,
-                    android.os.Process.myUid(),
-                    context.packageName
-                )
-                mode != AppOpsManager.MODE_ALLOWED
+                val appOpsManager = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+                appOpsManager?.let {
+                    // OPSTR_RUN_IN_BACKGROUND está disponível a partir do Android 8.0 (API 26)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val mode = it.checkOpNoThrow(
+                            AppOpsManager.OPSTR_RUN_IN_BACKGROUND,
+                            android.os.Process.myUid(),
+                            context.packageName
+                        )
+                        mode != AppOpsManager.MODE_ALLOWED
+                    } else {
+                        false
+                    }
+                } ?: false
             } else {
                 false
             }
