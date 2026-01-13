@@ -25,6 +25,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Assina o release com o keystore de debug para facilitar instalação de testes.
+            // Para produção, substitua por um keystore próprio e seguro.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     
