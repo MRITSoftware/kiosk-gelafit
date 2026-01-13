@@ -3,10 +3,16 @@ package com.bootreceiver.app.ui
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
-import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
+import android.widget.EditText
 import android.widget.ListView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -27,8 +33,11 @@ import kotlinx.coroutines.withContext
 class AppSelectionActivity : AppCompatActivity() {
     
     private lateinit var listView: ListView
+    private lateinit var searchEditText: EditText
     private lateinit var preferenceManager: PreferenceManager
     private val appsList = mutableListOf<AppInfo>()
+    private val filteredAppsList = mutableListOf<AppInfo>()
+    private lateinit var adapter: AppListAdapter
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,15 +61,81 @@ class AppSelectionActivity : AppCompatActivity() {
         }
         
         listView = findViewById(R.id.listViewApps)
+        searchEditText = findViewById(R.id.searchEditText)
+        
+        // Inicializa adapter vazio
+        adapter = AppListAdapter(filteredAppsList)
+        listView.adapter = adapter
+        
+        // Configura a barra de pesquisa
+        setupSearchBar()
         
         // Carrega lista de apps em background
         loadInstalledApps()
         
         // Configura o click na lista
         listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
-            val selectedApp = appsList[position]
-            selectApp(selectedApp.packageName, selectedApp.name)
+            val selectedApp = filteredAppsList[position]
+            showConfirmationDialog(selectedApp)
         }
+    }
+    
+    /**
+     * Configura a barra de pesquisa para filtrar apps
+     */
+    private fun setupSearchBar() {
+        searchEditText.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterApps(s.toString())
+            }
+            
+            override fun afterTextChanged(s: Editable?) {}
+        })
+    }
+    
+    /**
+     * Filtra a lista de apps baseado no texto de pesquisa
+     */
+    private fun filterApps(query: String) {
+        filteredAppsList.clear()
+        
+        if (query.isBlank()) {
+            filteredAppsList.addAll(appsList)
+        } else {
+            val lowerQuery = query.lowercase()
+            appsList.forEach { app ->
+                if (app.name.lowercase().contains(lowerQuery) || 
+                    app.packageName.lowercase().contains(lowerQuery)) {
+                    filteredAppsList.add(app)
+                }
+            }
+        }
+        
+        updateAdapter()
+    }
+    
+    /**
+     * Atualiza o adapter com a lista filtrada
+     */
+    private fun updateAdapter() {
+        adapter.updateList(filteredAppsList)
+    }
+    
+    /**
+     * Mostra diálogo de confirmação antes de selecionar o app
+     */
+    private fun showConfirmationDialog(app: AppInfo) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.confirm_selection))
+            .setMessage(getString(R.string.confirm_message, app.name))
+            .setPositiveButton("Confirmar") { _, _ ->
+                selectApp(app.packageName, app.name)
+            }
+            .setNegativeButton("Cancelar", null)
+            .setCancelable(true)
+            .show()
     }
     
     /**
@@ -129,13 +204,9 @@ class AppSelectionActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     appsList.clear()
                     appsList.addAll(apps)
-                    
-                    val adapter = ArrayAdapter(
-                        this@AppSelectionActivity,
-                        R.layout.list_item_app,
-                        appsList.map { "${it.name}\n${it.packageName}" }
-                    )
-                    listView.adapter = adapter
+                    filteredAppsList.clear()
+                    filteredAppsList.addAll(apps)
+                    updateAdapter()
                     
                     if (appsList.isEmpty()) {
                         Toast.makeText(
@@ -177,6 +248,36 @@ class AppSelectionActivity : AppCompatActivity() {
         listView.postDelayed({
             finish()
         }, 2000)
+    }
+    
+    /**
+     * Adapter customizado para exibir apps na lista
+     */
+    private inner class AppListAdapter(private var apps: MutableList<AppInfo>) : BaseAdapter() {
+        fun updateList(newApps: List<AppInfo>) {
+            apps.clear()
+            apps.addAll(newApps)
+            notifyDataSetChanged()
+        }
+        
+        override fun getCount(): Int = apps.size
+        
+        override fun getItem(position: Int): AppInfo = apps[position]
+        
+        override fun getItemId(position: Int): Long = position.toLong()
+        
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val view = convertView ?: layoutInflater.inflate(R.layout.list_item_app, parent, false)
+            val app = apps[position]
+            
+            val appNameView = view.findViewById<TextView>(R.id.appName)
+            val appPackageView = view.findViewById<TextView>(R.id.appPackage)
+            
+            appNameView.text = app.name
+            appPackageView.text = app.packageName
+            
+            return view
+        }
     }
     
     /**
