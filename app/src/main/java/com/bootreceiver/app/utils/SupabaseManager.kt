@@ -14,7 +14,7 @@ import kotlinx.serialization.Serializable
  * Gerenciador para comunicação com Supabase
  * 
  * Esta classe gerencia a conexão com o Supabase e verifica
- * comandos de reiniciar dispositivo na tabela 'reboot_commands'
+ * comandos de reiniciar dispositivo na tabela 'device_commands'
  */
 class SupabaseManager {
     
@@ -35,15 +35,15 @@ class SupabaseManager {
         try {
             Log.d(TAG, "Verificando comando de reiniciar para dispositivo: $deviceId")
             
-            val response = client.from("reboot_commands")
+            val response = client.from("device_commands")
                 .select(columns = Columns.ALL) {
                     filter {
                         eq("device_id", deviceId)
-                        eq("should_reboot", true)
+                        eq("command", "reboot")
                         eq("executed", false)
                     }
                 }
-                .decodeSingle<RebootCommand>()
+                .decodeSingle<DeviceCommand>()
             
             Log.d(TAG, "Comando encontrado: ${response.id}")
             true
@@ -70,28 +70,24 @@ class SupabaseManager {
             Log.d(TAG, "Marcando comando como executado para dispositivo: $deviceId")
             
             // Primeiro, busca o comando
-            val command = client.from("reboot_commands")
+            val command = client.from("device_commands")
                 .select(columns = Columns.ALL) {
                     filter {
                         eq("device_id", deviceId)
-                        eq("should_reboot", true)
+                        eq("command", "reboot")
                         eq("executed", false)
                     }
                 }
-                .decodeSingle<RebootCommand>()
+                .decodeSingle<DeviceCommand>()
             
             // Atualiza o comando como executado
             if (command.id != null) {
-                val updateData = RebootCommand(
-                    id = command.id,
-                    device_id = command.device_id,
-                    should_reboot = command.should_reboot,
-                    executed = true,
-                    created_at = command.created_at,
-                    executed_at = System.currentTimeMillis()
+                val updateData = mapOf(
+                    "executed" to true,
+                    "executed_at" to java.time.Instant.now().toString()
                 )
                 
-                client.from("reboot_commands")
+                client.from("device_commands")
                     .update(updateData) {
                         filter {
                             eq("id", command.id)
@@ -115,14 +111,15 @@ class SupabaseManager {
 }
 
 /**
- * Modelo de dados para comando de reiniciar
+ * Modelo de dados para comando de dispositivo
+ * Estrutura corresponde à tabela device_commands no Supabase
  */
 @Serializable
-data class RebootCommand(
-    val id: Long? = null,
+data class DeviceCommand(
+    val id: String? = null,  // UUID
     val device_id: String,
-    val should_reboot: Boolean = false,
+    val command: String,  // "reboot" para reiniciar
     val executed: Boolean = false,
-    val created_at: Long? = null,
-    val executed_at: Long? = null
+    val created_at: String? = null,  // TIMESTAMP WITH TIME ZONE
+    val executed_at: String? = null  // TIMESTAMP WITH TIME ZONE
 )

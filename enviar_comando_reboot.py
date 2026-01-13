@@ -14,7 +14,7 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 def enviar_comando_reboot(device_id):
     """Envia comando de reiniciar para um dispositivo"""
-    url = f"{SUPABASE_URL}/rest/v1/reboot_commands"
+    url = f"{SUPABASE_URL}/rest/v1/device_commands"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -24,7 +24,7 @@ def enviar_comando_reboot(device_id):
     
     data = {
         "device_id": device_id,
-        "should_reboot": True,
+        "command": "reboot",
         "executed": False
     }
     
@@ -57,7 +57,7 @@ def listar_comandos_pendentes(device_id=None):
     }
     
     params = {
-        "should_reboot": "eq.true",
+        "command": "eq.reboot",
         "executed": "eq.false",
         "order": "created_at.desc"
     }
@@ -88,7 +88,7 @@ def listar_comandos_pendentes(device_id=None):
 
 def verificar_status_comando(device_id):
     """Verifica status dos comandos de um dispositivo"""
-    url = f"{SUPABASE_URL}/rest/v1/reboot_commands"
+    url = f"{SUPABASE_URL}/rest/v1/device_commands"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}"

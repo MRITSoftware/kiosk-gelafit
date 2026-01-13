@@ -6,7 +6,7 @@ Este guia explica como enviar comandos de reiniciar para dispositivos através d
 
 1. **Device ID do dispositivo**: Você precisa do Android ID do dispositivo
 2. **Acesso ao Supabase**: Painel do Supabase ou SQL Editor
-3. **Tabela criada**: A tabela `reboot_commands` deve estar criada (veja `SETUP_SUPABASE.md`)
+3. **Tabela criada**: A tabela `device_commands` deve estar criada (veja `SUPABASE_SETUP.sql`)
 
 ## 🔍 Como Obter o Device ID
 
@@ -32,25 +32,25 @@ adb shell settings get secure android_id
 
 ```sql
 -- Enviar comando de reiniciar para um dispositivo específico
-INSERT INTO reboot_commands (device_id, should_reboot, executed)
-VALUES ('SEU_DEVICE_ID_AQUI', true, false);
+INSERT INTO device_commands (device_id, command, executed)
+VALUES ('SEU_DEVICE_ID_AQUI', 'reboot', false);
 ```
 
 **Exemplo:**
 ```sql
-INSERT INTO reboot_commands (device_id, should_reboot, executed)
-VALUES ('abc123def456789', true, false);
+INSERT INTO device_commands (device_id, command, executed)
+VALUES ('abc123def456789', 'reboot', false);
 ```
 
 ## 📝 Método 2: Via Table Editor do Supabase
 
 1. Acesse o **Supabase Dashboard**
 2. Vá em **Table Editor**
-3. Selecione a tabela `reboot_commands`
+3. Selecione a tabela `device_commands`
 4. Clique em **Insert row**
 5. Preencha:
    - `device_id`: ID do dispositivo
-   - `should_reboot`: `true`
+   - `command`: `reboot`
    - `executed`: `false`
 6. Clique em **Save**
 
@@ -78,7 +78,7 @@ def enviar_comando_reboot(device_id):
     
     data = {
         "device_id": device_id,
-        "should_reboot": True,
+        "command": "reboot",
         "executed": False
     }
     
@@ -153,14 +153,14 @@ python enviar_comando_reboot.py abc123def456789
 ## 📝 Método 4: Via cURL (Terminal)
 
 ```bash
-curl -X POST "https://kihyhoqbrkwbfudttevo.supabase.co/rest/v1/reboot_commands" \
+curl -X POST "https://kihyhoqbrkwbfudttevo.supabase.co/rest/v1/device_commands" \
   -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpaHlob3Ficmt3YmZ1ZHR0ZXZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU1NTUwMjcsImV4cCI6MjAzMTEzMTAyN30.XtBTlSiqhsuUIKmhAMEyxofV-dRst7240n912m4O4Us" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpaHlob3Ficmt3YmZ1ZHR0ZXZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU1NTUwMjcsImV4cCI6MjAzMTEzMTAyN30.XtBTlSiqhsuUIKmhAMEyxofV-dRst7240n912m4O4Us" \
   -H "Content-Type: application/json" \
   -H "Prefer: return=representation" \
   -d '{
     "device_id": "SEU_DEVICE_ID_AQUI",
-    "should_reboot": true,
+    "command": "reboot",
     "executed": false
   }'
 ```
@@ -169,23 +169,23 @@ curl -X POST "https://kihyhoqbrkwbfudttevo.supabase.co/rest/v1/reboot_commands" 
 
 ### Ver comandos pendentes:
 ```sql
-SELECT * FROM reboot_commands 
+SELECT * FROM device_commands 
 WHERE device_id = 'SEU_DEVICE_ID_AQUI' 
-  AND should_reboot = true 
+  AND command = 'reboot' 
   AND executed = false
 ORDER BY created_at DESC;
 ```
 
 ### Ver todos os comandos (executados e pendentes):
 ```sql
-SELECT * FROM reboot_commands 
+SELECT * FROM device_commands 
 WHERE device_id = 'SEU_DEVICE_ID_AQUI' 
 ORDER BY created_at DESC;
 ```
 
 ### Ver comandos executados:
 ```sql
-SELECT * FROM reboot_commands 
+SELECT * FROM device_commands 
 WHERE device_id = 'SEU_DEVICE_ID_AQUI' 
   AND executed = true
 ORDER BY executed_at DESC;
@@ -200,7 +200,7 @@ ORDER BY executed_at DESC;
 
 ## 🔄 Fluxo Completo
 
-1. **Enviar comando** → Insere registro na tabela `reboot_commands`
+1. **Enviar comando** → Insere registro na tabela `device_commands`
 2. **App detecta** → `RebootMonitorService` verifica periodicamente
 3. **Comando encontrado** → App marca como executado
 4. **Reiniciar** → App tenta reiniciar o dispositivo
