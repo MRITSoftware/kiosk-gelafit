@@ -92,6 +92,15 @@
             android:layout_marginBottom="8dp"
             android:fontFamily="monospace" />
 
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📊 Ver Status do Sistema"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#3B82F6"
+            android:layout_marginBottom="8dp" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

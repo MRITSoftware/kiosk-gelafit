@@ -161,6 +161,13 @@ class AppSelectionActivity : AppCompatActivity() {
         searchEditText = findViewById(R.id.searchEditText)
         deviceIdText = findViewById(R.id.deviceIdText)
         
+        // Botão de status
+        val btnStatus = findViewById<androidx.appcompat.widget.AppCompatButton>(R.id.btnStatus)
+        btnStatus?.setOnClickListener {
+            val intent = Intent(this, StatusActivity::class.java)
+            startActivity(intent)
+        }
+        
         // Mostra o Device ID e nome da unidade no rodapé
         val deviceId = DeviceIdManager.getDeviceId(this)
         val unitName = preferenceManager.getUnitName()

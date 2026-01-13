@@ -38,6 +38,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Activity de status e debug -->
+        <activity
+            android:name=".ui.StatusActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BootReceiver" />
+
         <!-- BroadcastReceiver para escutar o boot -->
         <receiver
             android:name=".receiver.BootReceiver"
