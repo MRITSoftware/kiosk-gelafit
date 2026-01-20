@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GelaFit Control</string>
+    <string name="select_app_title">Selecione o aplicativo</string>
+    <string name="select_app_subtitle">Toque em um aplicativo para selecionÃ¡-lo</string>
+    <string name="search_hint">Pesquisar aplicativo...</string>
+    <string name="confirm_selection">Confirmar SeleÃ§Ã£o</string>
+    <string name="confirm_message">Deseja selecionar %1$s?
+
+O aplicativo serÃ¡ aberto automaticamente no prÃ³ximo boot.</string>
+    <string name="copyright">Â© GelaFit</string>
+</resources>
