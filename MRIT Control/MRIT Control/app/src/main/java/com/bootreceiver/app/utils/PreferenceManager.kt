@@ -1,1 +1,97 @@
-﻿package com.bootreceiver.app.utilsimport android.content.Contextimport android.content.SharedPreferencesclass PreferenceManager(context: Context) {    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)        fun saveTargetPackageName(packageName: String) { prefs.edit().putString(KEY_TARGET_PACKAGE, packageName).apply() }    fun getTargetPackageName(): String? = prefs.getString(KEY_TARGET_PACKAGE, null)    fun isConfigured(): Boolean = !getTargetPackageName().isNullOrEmpty()    fun clearConfiguration() { prefs.edit().remove(KEY_TARGET_PACKAGE).apply() }    fun hasSeenDeviceIdInfo(): Boolean = prefs.getBoolean(KEY_HAS_SEEN_DEVICE_ID_INFO, false)    fun setHasSeenDeviceIdInfo(hasSeen: Boolean) { prefs.edit().putBoolean(KEY_HAS_SEEN_DEVICE_ID_INFO, hasSeen).apply() }    fun isDeviceRegistered(): Boolean = prefs.getBoolean(KEY_DEVICE_REGISTERED, false)    fun setDeviceRegistered(registered: Boolean) { prefs.edit().putBoolean(KEY_DEVICE_REGISTERED, registered).apply() }    fun saveUnitName(unitName: String) { prefs.edit().putString(KEY_UNIT_NAME, unitName).apply() }    fun getUnitName(): String? = prefs.getString(KEY_UNIT_NAME, null)        companion object {        private const val PREFS_NAME = "BootReceiverPrefs"        private const val KEY_TARGET_PACKAGE = "target_package_name"        private const val KEY_HAS_SEEN_DEVICE_ID_INFO = "has_seen_device_id_info"        private const val KEY_DEVICE_REGISTERED = "device_registered"        private const val KEY_UNIT_NAME = "unit_name"    }}
+﻿package com.bootreceiver.app.utils
+
+import android.content.Context
+import android.content.SharedPreferences
+
+/**
+ * Gerenciador de preferÃªncias para salvar/carregar configuraÃ§Ãµes do app
+ * 
+ * Usa SharedPreferences para persistir:
+ * - Package name do app alvo
+ * - Se jÃ¡ foi configurado pela primeira vez
+ */
+class PreferenceManager(context: Context) {
+    
+    private val prefs: SharedPreferences = context.getSharedPreferences(
+        PREFS_NAME, Context.MODE_PRIVATE
+    )
+    
+    /**
+     * Salva o package name do app que deve ser aberto automaticamente
+     */
+    fun saveTargetPackageName(packageName: String) {
+        prefs.edit().putString(KEY_TARGET_PACKAGE, packageName).apply()
+    }
+    
+    /**
+     * Retorna o package name do app configurado
+     * @return package name ou null se nÃ£o estiver configurado
+     */
+    fun getTargetPackageName(): String? {
+        return prefs.getString(KEY_TARGET_PACKAGE, null)
+    }
+    
+    /**
+     * Verifica se jÃ¡ foi configurado um app alvo
+     */
+    fun isConfigured(): Boolean {
+        return !getTargetPackageName().isNullOrEmpty()
+    }
+    
+    /**
+     * Limpa a configuraÃ§Ã£o (Ãºtil para testes)
+     */
+    fun clearConfiguration() {
+        prefs.edit().remove(KEY_TARGET_PACKAGE).apply()
+    }
+    
+    /**
+     * Verifica se o usuÃ¡rio jÃ¡ viu a informaÃ§Ã£o do Device ID
+     */
+    fun hasSeenDeviceIdInfo(): Boolean {
+        return prefs.getBoolean(KEY_HAS_SEEN_DEVICE_ID_INFO, false)
+    }
+    
+    /**
+     * Marca que o usuÃ¡rio jÃ¡ viu a informaÃ§Ã£o do Device ID
+     */
+    fun setHasSeenDeviceIdInfo(hasSeen: Boolean) {
+        prefs.edit().putBoolean(KEY_HAS_SEEN_DEVICE_ID_INFO, hasSeen).apply()
+    }
+    
+    /**
+     * Verifica se o dispositivo jÃ¡ foi registrado no Supabase
+     */
+    fun isDeviceRegistered(): Boolean {
+        return prefs.getBoolean(KEY_DEVICE_REGISTERED, false)
+    }
+    
+    /**
+     * Marca que o dispositivo foi registrado no Supabase
+     */
+    fun setDeviceRegistered(registered: Boolean) {
+        prefs.edit().putBoolean(KEY_DEVICE_REGISTERED, registered).apply()
+    }
+    
+    /**
+     * Salva o nome da unidade (email)
+     */
+    fun saveUnitName(unitName: String) {
+        prefs.edit().putString(KEY_UNIT_NAME, unitName).apply()
+    }
+    
+    /**
+     * ObtÃ©m o nome da unidade salvo
+     */
+    fun getUnitName(): String? {
+        return prefs.getString(KEY_UNIT_NAME, null)
+    }
+    
+    companion object {
+        private const val PREFS_NAME = "BootReceiverPrefs"
+        private const val KEY_TARGET_PACKAGE = "target_package_name"
+        private const val KEY_HAS_SEEN_DEVICE_ID_INFO = "has_seen_device_id_info"
+        private const val KEY_DEVICE_REGISTERED = "device_registered"
+        private const val KEY_UNIT_NAME = "unit_name"
+    }
+}
