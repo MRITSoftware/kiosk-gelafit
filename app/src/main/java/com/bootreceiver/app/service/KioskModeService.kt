@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -201,8 +202,8 @@ class KioskModeService : Service() {
                     Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                 }
 
-                // Verifica a cada 30 segundos (resposta rápida quando setado manualmente)
-                delay(30 * 1000L)
+                // Verifica a cada 2 segundos (resposta muito mais rápida quando setado manualmente)
+                delay(2 * 1000L)
             } catch (e: Exception) {
                 Log.e(TAG, "Erro no monitoramento: ${e.message}", e)
                 delay(ERROR_RETRY_DELAY_MS)
