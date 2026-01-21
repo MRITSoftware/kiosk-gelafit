@@ -10,7 +10,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import com.bootreceiver.app.R
-import com.bootreceiver.app.utils.DeviceIdManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,16 +66,7 @@ class SettingsCheckActivity : AppCompatActivity() {
                 if (hasAppConfigured) "✅ Configurado" else "❌ Nenhum app configurado"
             ))
             
-            // 3. Verifica Device ID
-            val deviceId = DeviceIdManager.getDeviceId(this@SettingsCheckActivity)
-            checks.add(SettingCheck(
-                "Device ID",
-                deviceId.isNotEmpty(),
-                "ID único do dispositivo",
-                if (deviceId.isNotEmpty()) "✅ $deviceId" else "❌ Não disponível"
-            ))
-            
-            // 4. Verifica se o app configurado está instalado
+            // 3. Verifica se o app configurado está instalado
             if (hasAppConfigured) {
                 val targetPackage = preferenceManager.getTargetPackageName()
                 val isInstalled = try {
@@ -93,20 +83,6 @@ class SettingsCheckActivity : AppCompatActivity() {
                 ))
             }
             
-            // 5. Verifica conexão com Supabase (verifica se consegue buscar status)
-            val supabaseManager = com.bootreceiver.app.utils.SupabaseManager()
-            val supabaseConnected = try {
-                val status = supabaseManager.getDeviceStatus(deviceId)
-                status != null
-            } catch (e: Exception) {
-                false
-            }
-            checks.add(SettingCheck(
-                "Conexão com Supabase",
-                supabaseConnected,
-                "Necessária para sincronizar configurações",
-                if (supabaseConnected) "✅ Conectado" else "❌ Sem conexão"
-            ))
             
             // Atualiza UI
             runOnUiThread {
