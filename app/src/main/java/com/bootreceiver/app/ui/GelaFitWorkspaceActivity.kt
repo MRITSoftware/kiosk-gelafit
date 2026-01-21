@@ -971,16 +971,16 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         // Se is_active está ativo E não está desbloqueado, impede que a activity seja pausada (minimizada)
         if (isActive == true && !gelafitUnlocked && kioskMode != true) {
             Log.d(TAG, "🔒 Tentativa de pausar bloqueada (is_active = true, não desbloqueado)")
-            // Reabre imediatamente usando Handler para resposta mais rápida
-            Handler(Looper.getMainLooper()).postDelayed({
+            // Reabre INSTANTANEAMENTE sem delay para resposta imediata
+            Handler(Looper.getMainLooper()).post {
                 showAppsGrid()
                 // Garante que a activity está em foreground
                 if (!isFinishing) {
                     val intent = Intent(this, GelaFitWorkspaceActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     startActivity(intent)
                 }
-            }, 100) // Delay mínimo de 100ms para resposta rápida
+            }
         } else if (kioskMode == true && !targetAppUnlocked) {
             // Quando modo_kiosk está ativo E não está desbloqueado, abre o app automaticamente
             Handler(Looper.getMainLooper()).postDelayed({
@@ -1091,7 +1091,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         // Se is_active ou modo_kiosk está ativo E não está desbloqueado, impede saída da activity
         if ((isActive == true && !gelafitUnlocked) || (kioskMode == true && !targetAppUnlocked)) {
             Log.d(TAG, "🔒 Tentativa de sair bloqueada")
-            Handler(Looper.getMainLooper()).postDelayed({
+            Handler(Looper.getMainLooper()).post {
                 if (kioskMode == true && !targetAppUnlocked) {
                     // Quando modo_kiosk está ativo, abre o app
                     val targetPackage = preferenceManager.getTargetPackageName()
@@ -1099,13 +1099,13 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                         openConfiguredApp(targetPackage)
                     }
                 } else if (isActive == true && !gelafitUnlocked) {
-                    // Quando apenas is_active está ativo, apenas mostra o grid
+                    // Quando apenas is_active está ativo, apenas mostra o grid INSTANTANEAMENTE
                     showAppsGrid()
                     val intent = Intent(this, GelaFitWorkspaceActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     startActivity(intent)
                 }
-            }, 100) // Delay mínimo para resposta rápida
+            }
         }
     }
     

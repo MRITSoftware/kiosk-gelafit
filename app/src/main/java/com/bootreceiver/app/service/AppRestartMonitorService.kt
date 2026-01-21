@@ -20,7 +20,11 @@ import com.bootreceiver.app.utils.DeviceCommand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 /**
@@ -34,8 +38,9 @@ import kotlinx.coroutines.launch
  */
 class AppRestartMonitorService : Service() {
     
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isRunning = false
+    private var monitoringJob: Job? = null
     private val supabaseManager = SupabaseManager()
     private lateinit var deviceId: String
     private var isRestarting = false // Flag para evitar múltiplos reinícios simultâneos
@@ -136,25 +141,37 @@ class AppRestartMonitorService : Service() {
     }
     
     /**
-     * Inicia o monitoramento com polling otimizado (5 minutos)
-     * Realtime será implementado em versão futura após validação da API
+     * Inicia o monitoramento REALTIME de comandos de reiniciar
+     * Usa polling otimizado (1 segundo) para detectar comandos rapidamente
      */
-    private suspend fun startMonitoring() {
-        Log.d(TAG, "🔄 Iniciando monitoramento com polling otimizado (5 minutos)")
+    private fun startMonitoring() {
+        Log.d(TAG, "🔄 Iniciando monitoramento REALTIME de comandos (1 segundo)")
         
-        while (isRunning) {
+        monitoringJob = serviceScope.launch {
             try {
-                if (!isRestarting) {
-                    val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
-                    if (commandInfo != null) {
-                        processRestartCommand(commandInfo)
+                supabaseManager.subscribeToRestartCommands(deviceId)
+                    .onEach { command ->
+                        // Recebe comandos em tempo real
+                        if (!isRestarting) {
+                            Log.d(TAG, "🔄 REALTIME: Comando de reiniciar detectado: ${command.id}")
+                            processRestartCommand(command)
+                        } else {
+                            Log.d(TAG, "⏳ Reinício já em andamento, ignorando comando...")
+                        }
                     }
-                }
-                // Verifica a cada 5 minutos (economiza requisições)
-                delay(5 * 60 * 1000L)
+                    .catch { e ->
+                        Log.e(TAG, "❌ Erro no monitoramento Realtime: ${e.message}", e)
+                        // Em caso de erro, tenta reconectar após delay
+                        kotlinx.coroutines.delay(ERROR_RETRY_DELAY_MS)
+                        if (isRunning) {
+                            // Tenta reconectar
+                            monitoringJob?.cancel()
+                            startMonitoring()
+                        }
+                    }
+                    .launchIn(this)
             } catch (e: Exception) {
-                Log.e(TAG, "Erro no monitoramento: ${e.message}", e)
-                delay(ERROR_RETRY_DELAY_MS)
+                Log.e(TAG, "❌ Erro ao iniciar subscription Realtime: ${e.message}", e)
             }
         }
     }
@@ -235,6 +252,11 @@ class AppRestartMonitorService : Service() {
         super.onDestroy()
         Log.d(TAG, "⚠️ AppRestartMonitorService destruído - tentando reiniciar...")
         
+        // Para monitoramento
+        isRunning = false
+        monitoringJob?.cancel()
+        monitoringJob = null
+        
         // Sempre tenta reiniciar o serviço para garantir que sempre esteja rodando
         serviceScope.launch {
             try {
@@ -250,8 +272,6 @@ class AppRestartMonitorService : Service() {
                 Log.e(TAG, "Erro ao tentar reiniciar serviço: ${e.message}", e)
             }
         }
-        
-        isRunning = false
     }
     
     override fun onTaskRemoved(rootIntent: Intent?) {

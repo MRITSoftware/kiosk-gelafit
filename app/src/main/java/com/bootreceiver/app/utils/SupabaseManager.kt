@@ -544,6 +544,37 @@ class SupabaseManager {
         Log.d(TAG, "🔌 Subscription será cancelada automaticamente quando o Flow for cancelado")
     }
     
+    /**
+     * Cria um Flow que verifica comandos de reiniciar periodicamente
+     * Usa polling otimizado (a cada 1 segundo) para detectar comandos rapidamente
+     * 
+     * @param deviceId ID único do dispositivo para filtrar comandos
+     * @return Flow que emite DeviceCommand quando há comando pendente
+     */
+    fun subscribeToRestartCommands(deviceId: String): Flow<DeviceCommand> {
+        return kotlinx.coroutines.flow.flow {
+            var lastCommandId: String? = null
+            
+            while (true) {
+                try {
+                    val command = getRestartAppCommand(deviceId)
+                    
+                    // Só emite se há comando novo (não processado ainda)
+                    if (command != null && command.id != lastCommandId) {
+                        Log.d(TAG, "🔄 Comando de reiniciar detectado: ${command.id}")
+                        emit(command)
+                        lastCommandId = command.id
+                    }
+                    
+                    kotlinx.coroutines.delay(1000) // Verifica a cada 1 segundo (muito mais rápido que 5 minutos)
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Erro ao verificar comandos: ${e.message}", e)
+                    kotlinx.coroutines.delay(5000) // Em caso de erro, aguarda mais tempo
+                }
+            }
+        }
+    }
+    
     companion object {
         private const val TAG = "SupabaseManager"
         private const val SUPABASE_URL = "https://kihyhoqbrkwbfudttevo.supabase.co"
