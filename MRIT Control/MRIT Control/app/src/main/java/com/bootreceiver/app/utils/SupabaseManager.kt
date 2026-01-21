@@ -263,6 +263,41 @@ class SupabaseManager {
     }
     
     /**
+     * Verifica se o dispositivo está ativo (is_active) no Supabase
+     * Quando is_active = true, bloqueia acesso a outros apps
+     * 
+     * @param deviceId ID único do dispositivo
+     * @return true se is_active está ativo, false caso contrário, null se erro
+     */
+    suspend fun getIsActive(deviceId: String): Boolean? = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "🔍 Verificando is_active para dispositivo: $deviceId")
+            
+            val device = client.from("devices")
+                .select(columns = Columns.ALL) {
+                    filter {
+                        eq("device_id", deviceId)
+                    }
+                }
+                .decodeSingle<Device>()
+            
+            val isActive = device.is_active ?: true
+            Log.d(TAG, "ℹ️ is_active: $isActive")
+            return@withContext isActive
+        } catch (e: Exception) {
+            if (e.message?.contains("No rows") == true || 
+                e.message?.contains("not found") == true ||
+                e.message?.contains("No value") == true) {
+                Log.d(TAG, "ℹ️ Dispositivo não encontrado. is_active: true (padrão)")
+                return@withContext true
+            } else {
+                Log.e(TAG, "❌ Erro ao verificar is_active: ${e.message}", e)
+                return@withContext null
+            }
+        }
+    }
+    
+    /**
      * Registra ou atualiza um dispositivo na tabela devices
      * 
      * @param deviceId ID único do dispositivo (Android ID)
@@ -318,7 +353,7 @@ class SupabaseManager {
                 val newDevice = Device(
                     device_id = deviceId,
                     unit_name = unitName,
-                    is_active = true
+                    is_active = true  // Por padrão, dispositivo é criado como ativo
                 )
                 
                 client.from("devices")
@@ -352,7 +387,7 @@ data class Device(
     val unit_name: String? = null,
     val registered_at: String? = null,
     val last_seen: String? = null,
-    val is_active: Boolean = true,
+    val is_active: Boolean? = true,  // Se true, bloqueia acesso a outros apps
     val kiosk_mode: Boolean? = false,  // Modo kiosk (bloqueia minimização)
     val created_at: String? = null,
     val updated_at: String? = null

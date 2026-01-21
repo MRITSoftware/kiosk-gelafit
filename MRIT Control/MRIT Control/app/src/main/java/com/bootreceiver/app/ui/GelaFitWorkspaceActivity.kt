@@ -17,10 +17,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Activity principal que serve como "Ã¡rea de trabalho" do GelaFit Control
+ * Activity principal que serve como "área de trabalho" do GelaFit Control
  * 
  * Esta Activity:
- * 1. Mostra apenas o app escolhido pelo usuÃ¡rio
+ * 1. Mostra apenas o app escolhido pelo usuário
  * 2. Se is_active = true: bloqueia acesso a outros apps
  * 3. Se is_active = false: permite acesso normal
  * 4. Monitora constantemente o status de is_active no Supabase
@@ -44,10 +44,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         // Configura a Activity para ocupar toda a tela
         setupFullScreen()
         
-        // Verifica se hÃ¡ app configurado
+        // Verifica se há app configurado
         val targetPackage = preferenceManager.getTargetPackageName()
         if (targetPackage.isNullOrEmpty()) {
-            Log.w(TAG, "Nenhum app configurado. Redirecionando para seleÃ§Ã£o...")
+            Log.w(TAG, "Nenhum app configurado. Redirecionando para seleção...")
             val intent = Intent(this, AppSelectionActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             startActivity(intent)
@@ -55,10 +55,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             return
         }
         
-        Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
-        Log.d(TAG, "ðŸ¢ GelaFit Workspace iniciado")
-        Log.d(TAG, "ðŸ“± App configurado: $targetPackage")
-        Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+        Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d(TAG, "🏢 GelaFit Workspace iniciado")
+        Log.d(TAG, "📱 App configurado: $targetPackage")
+        Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         // Inicia monitoramento de is_active
         startMonitoring()
@@ -76,7 +76,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         )
         
-        // Remove barra de navegaÃ§Ã£o e status bar
+        // Remove barra de navegação e status bar
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
             window.decorView.systemUiVisibility = (
                 android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -91,17 +91,17 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      */
     private fun openConfiguredApp(packageName: String) {
         try {
-            Log.d(TAG, "ðŸš€ Abrindo app: $packageName")
+            Log.d(TAG, "🚀 Abrindo app: $packageName")
             val appLauncher = AppLauncher(this)
             val success = appLauncher.launchApp(packageName)
             
             if (success) {
-                Log.d(TAG, "âœ… App aberto com sucesso")
+                Log.d(TAG, "✅ App aberto com sucesso")
             } else {
-                Log.e(TAG, "âŒ Falha ao abrir app")
+                Log.e(TAG, "❌ Falha ao abrir app")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "âŒ Erro ao abrir app: ${e.message}", e)
+            Log.e(TAG, "❌ Erro ao abrir app: ${e.message}", e)
         }
     }
     
@@ -110,7 +110,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      */
     private fun startMonitoring() {
         if (isMonitoring) {
-            Log.d(TAG, "Monitoramento jÃ¡ estÃ¡ ativo")
+            Log.d(TAG, "Monitoramento já está ativo")
             return
         }
         
@@ -120,22 +120,22 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 try {
                     val currentIsActive = supabaseManager.getIsActive(deviceId)
                     
-                    // Se mudou o status, aplica as mudanÃ§as
+                    // Se mudou o status, aplica as mudanças
                     if (isActive != currentIsActive) {
-                        Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                        Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         if (currentIsActive == true) {
-                            Log.d(TAG, "ðŸ”’ IS_ACTIVE ATIVADO - Bloqueando acesso a outros apps")
-                            Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                            Log.d(TAG, "🔒 IS_ACTIVE ATIVADO - Bloqueando acesso a outros apps")
+                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                             applyAppBlocking()
                         } else {
-                            Log.d(TAG, "ðŸ”“ IS_ACTIVE DESATIVADO - Liberando acesso")
-                            Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                            Log.d(TAG, "🔓 IS_ACTIVE DESATIVADO - Liberando acesso")
+                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                             removeAppBlocking()
                         }
                         isActive = currentIsActive
                     }
                     
-                    // Se is_active estÃ¡ ativo, garante que apenas o app configurado estÃ¡ aberto
+                    // Se is_active está ativo, garante que apenas o app configurado está aberto
                     if (currentIsActive == true) {
                         ensureOnlyConfiguredAppIsOpen()
                     }
@@ -153,9 +153,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Aplica bloqueio de acesso a outros apps
      */
     private fun applyAppBlocking() {
-        Log.d(TAG, "ðŸ”’ Aplicando bloqueio de apps...")
+        Log.d(TAG, "🔒 Aplicando bloqueio de apps...")
         
-        // Inicia o serviÃ§o de bloqueio de apps
+        // Inicia o serviço de bloqueio de apps
         try {
             val blockingIntent = Intent(this, com.bootreceiver.app.service.AppBlockingService::class.java).apply {
                 putExtra("is_active", true)
@@ -165,9 +165,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             } else {
                 startService(blockingIntent)
             }
-            Log.d(TAG, "âœ… ServiÃ§o de bloqueio iniciado")
+            Log.d(TAG, "✅ Serviço de bloqueio iniciado")
         } catch (e: Exception) {
-            Log.e(TAG, "âŒ Erro ao iniciar serviÃ§o de bloqueio: ${e.message}", e)
+            Log.e(TAG, "❌ Erro ao iniciar serviço de bloqueio: ${e.message}", e)
         }
     }
     
@@ -175,31 +175,31 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Remove bloqueio de acesso a outros apps
      */
     private fun removeAppBlocking() {
-        Log.d(TAG, "ðŸ”“ Removendo bloqueio de apps...")
+        Log.d(TAG, "🔓 Removendo bloqueio de apps...")
         
-        // Para o serviÃ§o de bloqueio
+        // Para o serviço de bloqueio
         try {
             val blockingIntent = Intent(this, com.bootreceiver.app.service.AppBlockingService::class.java).apply {
                 putExtra("is_active", false)
             }
             startService(blockingIntent)
-            Log.d(TAG, "âœ… ServiÃ§o de bloqueio parado")
+            Log.d(TAG, "✅ Serviço de bloqueio parado")
         } catch (e: Exception) {
-            Log.e(TAG, "âŒ Erro ao parar serviÃ§o de bloqueio: ${e.message}", e)
+            Log.e(TAG, "❌ Erro ao parar serviço de bloqueio: ${e.message}", e)
         }
     }
     
     /**
-     * Garante que apenas o app configurado estÃ¡ aberto
+     * Garante que apenas o app configurado está aberto
      * Se outro app estiver aberto, fecha e reabre o app configurado
      */
-    private fun ensureOnlyConfiguredAppIsOpen() {
+    private suspend fun ensureOnlyConfiguredAppIsOpen() {
         val targetPackage = preferenceManager.getTargetPackageName() ?: return
         
         try {
             val activityManager = getSystemService(android.app.ActivityManager::class.java)
             
-            // Verifica qual app estÃ¡ em foreground
+            // Verifica qual app está em foreground
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                 val runningTasks = activityManager.getAppTasks()
                 if (runningTasks != null && runningTasks.isNotEmpty()) {
@@ -208,16 +208,16 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     if (taskInfo != null && taskInfo.topActivity != null) {
                         val topPackage = taskInfo.topActivity!!.packageName
                         
-                        // Se nÃ£o Ã© o app configurado nem o prÃ³prio GelaFit Control, fecha e reabre o app configurado
+                        // Se não é o app configurado nem o próprio GelaFit Control, fecha e reabre o app configurado
                         if (topPackage != targetPackage && topPackage != packageName) {
-                            Log.w(TAG, "âš ï¸ App nÃ£o autorizado detectado: $topPackage")
-                            Log.d(TAG, "ðŸ”„ Fechando e reabrindo app configurado...")
+                            Log.w(TAG, "⚠️ App não autorizado detectado: $topPackage")
+                            Log.d(TAG, "🔄 Fechando e reabrindo app configurado...")
                             
-                            // Fecha o app nÃ£o autorizado
+                            // Fecha o app não autorizado
                             try {
                                 activityManager.killBackgroundProcesses(topPackage)
                             } catch (e: Exception) {
-                                Log.w(TAG, "NÃ£o foi possÃ­vel fechar app: ${e.message}")
+                                Log.w(TAG, "Não foi possível fechar app: ${e.message}")
                             }
                             
                             // Reabre o app configurado
@@ -234,9 +234,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "onResume - Garantindo que app configurado estÃ¡ aberto")
+        Log.d(TAG, "onResume - Garantindo que app configurado está aberto")
         
-        // Se is_active estÃ¡ ativo, garante que o app configurado estÃ¡ aberto
+        // Se is_active está ativo, garante que o app configurado está aberto
         if (isActive == true) {
             val targetPackage = preferenceManager.getTargetPackageName()
             if (!targetPackage.isNullOrEmpty()) {
@@ -247,19 +247,19 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
-        // NÃ£o faz nada - mantÃ©m o monitoramento ativo
+        // Não faz nada - mantém o monitoramento ativo
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "âš ï¸ GelaFitWorkspaceActivity destruÃ­da")
+        Log.d(TAG, "⚠️ GelaFitWorkspaceActivity destruída")
         isMonitoring = false
     }
     
     override fun onBackPressed() {
-        // Se is_active estÃ¡ ativo, bloqueia o botÃ£o voltar
+        // Se is_active está ativo, bloqueia o botão voltar
         if (isActive == true) {
-            Log.d(TAG, "ðŸ”’ BotÃ£o voltar bloqueado (is_active = true)")
+            Log.d(TAG, "🔒 Botão voltar bloqueado (is_active = true)")
             val targetPackage = preferenceManager.getTargetPackageName()
             if (!targetPackage.isNullOrEmpty()) {
                 openConfiguredApp(targetPackage)
@@ -267,7 +267,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             return
         }
         
-        // Se is_active estÃ¡ desativado, permite comportamento normal
+        // Se is_active está desativado, permite comportamento normal
         super.onBackPressed()
     }
     
