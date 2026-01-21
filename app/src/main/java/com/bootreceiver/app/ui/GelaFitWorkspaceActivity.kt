@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -129,7 +130,14 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         startMonitoring()
         
         // Registra receiver para atualizar grid quando app for adicionado
-        registerReceiver(appAddedReceiver, IntentFilter("com.bootreceiver.app.APP_ADDED_TO_GRID"))
+        // Para Android 13+ (API 33+), é necessário especificar RECEIVER_NOT_EXPORTED
+        val filter = IntentFilter("com.bootreceiver.app.APP_ADDED_TO_GRID")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(appAddedReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(appAddedReceiver, filter)
+        }
     }
     
     /**
