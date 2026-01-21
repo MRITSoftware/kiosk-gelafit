@@ -7,20 +7,10 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.realtime.Realtime
-import io.github.jan.supabase.realtime.channel
-import io.github.jan.supabase.realtime.realtime
-import io.github.jan.supabase.realtime.on
-import io.github.jan.supabase.realtime.PostgresChangesEvent
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.awaitClose
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
@@ -513,70 +503,41 @@ class SupabaseManager {
     }
     
     /**
-     * Cria um Flow que escuta mudanças em tempo real na tabela devices usando Supabase Realtime
-     * Usa WebSocket para receber mudanças instantaneamente sem polling
+     * Cria um Flow que verifica mudanças periodicamente na tabela devices
+     * Usa polling otimizado (a cada 5 segundos) - emite apenas quando há mudança real
+     * 
+     * NOTA: A API Realtime do Supabase Kotlin (v2.3.0) não expõe funções públicas
+     * para postgres changes de forma direta. Por enquanto, usamos polling otimizado
+     * que reduz significativamente as requisições (de 60/min para 12/min).
+     * 
+     * Quando a API Realtime estiver disponível ou documentada, podemos migrar facilmente.
      * 
      * @param deviceId ID único do dispositivo para filtrar mudanças
      * @return Flow que emite DeviceStatus quando há mudanças no banco
      */
     fun subscribeToDeviceChanges(deviceId: String): Flow<DeviceStatus> {
-        return callbackFlow {
-            Log.d(TAG, "🔌 Iniciando subscription Realtime para dispositivo: $deviceId")
-            
-            // Busca status inicial
+        return flow {
             var lastStatus: DeviceStatus? = null
-            try {
-                val initialStatus = withContext(Dispatchers.IO) {
-                    getDeviceStatus(deviceId)
-                }
-                val currentStatus = initialStatus ?: DeviceStatus(isActive = false, kioskMode = false)
-                lastStatus = currentStatus
-                Log.d(TAG, "📊 Status inicial - is_active: ${currentStatus.isActive}, modo_kiosk: ${currentStatus.kioskMode}")
-                trySend(currentStatus)
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Erro ao buscar status inicial: ${e.message}", e)
-            }
             
-            // Cria canal Realtime para escutar mudanças na tabela devices
-            val channel = client.realtime.channel("device-changes-$deviceId")
-            
-            // Cria um scope para processar mudanças
-            val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-            
-            // Escuta mudanças na tabela devices usando on() com PostgresChangesEvent
-            channel.on(PostgresChangesEvent.UPDATE, schema = "public", table = "devices", filter = "device_id=eq.$deviceId") { change ->
+            while (true) {
                 try {
-                    Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela devices")
-                    
-                    // Busca o status atualizado após a mudança
-                    processScope.launch {
-                        val status = withContext(Dispatchers.IO) {
-                            getDeviceStatus(deviceId)
-                        }
-                        
-                        val newStatus = status ?: DeviceStatus(isActive = false, kioskMode = false)
-                        
-                        // Só emite se mudou
-                        if (lastStatus == null || lastStatus != newStatus) {
-                            Log.d(TAG, "🔄 Status atualizado via Realtime - is_active: ${newStatus.isActive}, modo_kiosk: ${newStatus.kioskMode}")
-                            trySend(newStatus)
-                            lastStatus = newStatus
-                        }
+                    val status = withContext(Dispatchers.IO) {
+                        getDeviceStatus(deviceId)
                     }
+                    val currentStatus = status ?: DeviceStatus(isActive = false, kioskMode = false)
+                    
+                    // Só emite se mudou (otimização - evita processamento desnecessário)
+                    if (lastStatus == null || lastStatus != currentStatus) {
+                        Log.d(TAG, "🔄 Status atualizado - is_active: ${currentStatus.isActive}, modo_kiosk: ${currentStatus.kioskMode}")
+                        emit(currentStatus)
+                        lastStatus = currentStatus
+                    }
+                    
+                    delay(5000) // Verifica a cada 5 segundos (reduz requisições de 60/min para 12/min)
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Erro ao processar mudança Realtime: ${e.message}", e)
+                    Log.e(TAG, "❌ Erro ao verificar status: ${e.message}", e)
+                    delay(10000) // Em caso de erro, aguarda mais tempo
                 }
-            }
-            
-            // Inscreve no canal
-            channel.subscribe()
-            Log.d(TAG, "✅ Subscription Realtime ativa para dispositivo: $deviceId")
-            
-            // Aguarda até que o Flow seja cancelado
-            awaitClose {
-                Log.d(TAG, "🔌 Fechando subscription Realtime para dispositivo: $deviceId")
-                processScope.cancel()
-                channel.unsubscribe()
             }
         }
     }
@@ -595,70 +556,40 @@ class SupabaseManager {
     }
     
     /**
-     * Cria um Flow que escuta comandos de reiniciar em tempo real usando Supabase Realtime
-     * Usa WebSocket para receber mudanças instantaneamente sem polling
+     * Cria um Flow que verifica comandos de reiniciar periodicamente
+     * Usa polling otimizado (a cada 5 segundos) - emite apenas quando há comando novo
+     * 
+     * NOTA: A API Realtime do Supabase Kotlin (v2.3.0) não expõe funções públicas
+     * para postgres changes de forma direta. Por enquanto, usamos polling otimizado
+     * que reduz significativamente as requisições (de 60/min para 12/min).
+     * 
+     * Quando a API Realtime estiver disponível ou documentada, podemos migrar facilmente.
      * 
      * @param deviceId ID único do dispositivo para filtrar comandos
      * @return Flow que emite DeviceCommand quando há comando pendente
      */
     fun subscribeToRestartCommands(deviceId: String): kotlinx.coroutines.flow.Flow<DeviceCommand> {
-        return callbackFlow {
-            Log.d(TAG, "🔌 Iniciando subscription Realtime para comandos do dispositivo: $deviceId")
-            
+        return flow {
             var lastCommandId: String? = null
             
-            // Busca comando inicial se houver
-            try {
-                val initialCommand = withContext(Dispatchers.IO) {
-                    getRestartAppCommand(deviceId)
-                }
-                if (initialCommand != null && initialCommand.id != null) {
-                    Log.d(TAG, "📊 Comando inicial encontrado: ${initialCommand.id}")
-                    trySend(initialCommand)
-                    lastCommandId = initialCommand.id
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Erro ao buscar comando inicial: ${e.message}", e)
-            }
-            
-            // Cria canal Realtime para escutar mudanças na tabela device_commands
-            val channel = client.realtime.channel("restart-commands-$deviceId")
-            
-            // Cria um scope para processar mudanças
-            val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-            
-            // Escuta INSERT na tabela device_commands usando on() com PostgresChangesEvent
-            channel.on(PostgresChangesEvent.INSERT, schema = "public", table = "device_commands", filter = "device_id=eq.$deviceId") { change ->
+            while (true) {
                 try {
-                    Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela device_commands")
-                    
-                    // Busca o comando mais recente
-                    processScope.launch {
-                        val command = withContext(Dispatchers.IO) {
-                            getRestartAppCommand(deviceId)
-                        }
-                        
-                        // Só emite se há comando novo (não processado ainda)
-                        if (command != null && command.id != null && command.id != lastCommandId) {
-                            Log.d(TAG, "🔄 Comando de reiniciar detectado via Realtime: ${command.id}")
-                            trySend(command)
-                            lastCommandId = command.id
-                        }
+                    val command = withContext(Dispatchers.IO) {
+                        getRestartAppCommand(deviceId)
                     }
+                    
+                    // Só emite se há comando novo (não processado ainda)
+                    if (command != null && command.id != null && command.id != lastCommandId) {
+                        Log.d(TAG, "🔄 Comando de reiniciar detectado: ${command.id}")
+                        emit(command)
+                        lastCommandId = command.id
+                    }
+                    
+                    delay(5000) // Verifica a cada 5 segundos (reduz requisições de 60/min para 12/min)
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Erro ao processar comando Realtime: ${e.message}", e)
+                    Log.e(TAG, "❌ Erro ao verificar comandos: ${e.message}", e)
+                    delay(10000) // Em caso de erro, aguarda mais tempo
                 }
-            }
-            
-            // Inscreve no canal
-            channel.subscribe()
-            Log.d(TAG, "✅ Subscription Realtime ativa para comandos do dispositivo: $deviceId")
-            
-            // Aguarda até que o Flow seja cancelado
-            awaitClose {
-                Log.d(TAG, "🔌 Fechando subscription Realtime para comandos do dispositivo: $deviceId")
-                processScope.cancel()
-                channel.unsubscribe()
             }
         }
     }
