@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Esta Activity serve apenas como container para o app escolhido -->
+    <!-- O app escolhido serÃ¡ aberto e exibido sobre esta Activity -->
+
+</FrameLayout>
