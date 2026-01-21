@@ -9,7 +9,8 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.realtime
-import io.github.jan.supabase.realtime.onPostgresChange
+import io.github.jan.supabase.realtime.on
+import io.github.jan.supabase.realtime.PostgresChangesEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -542,12 +543,8 @@ class SupabaseManager {
             // Cria um scope para processar mudanças
             val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
             
-            // Escuta mudanças na tabela devices usando onPostgresChange
-            channel.onPostgresChange(
-                schema = "public",
-                table = "devices",
-                filter = "device_id=eq.$deviceId"
-            ) { change ->
+            // Escuta mudanças na tabela devices usando on() com PostgresChangesEvent
+            channel.on(PostgresChangesEvent.UPDATE, schema = "public", table = "devices", filter = "device_id=eq.$deviceId") { change ->
                 try {
                     Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela devices")
                     
@@ -630,12 +627,8 @@ class SupabaseManager {
             // Cria um scope para processar mudanças
             val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
             
-            // Escuta INSERT na tabela device_commands usando onPostgresChange
-            channel.onPostgresChange(
-                schema = "public",
-                table = "device_commands",
-                filter = "device_id=eq.$deviceId"
-            ) { change ->
+            // Escuta INSERT na tabela device_commands usando on() com PostgresChangesEvent
+            channel.on(PostgresChangesEvent.INSERT, schema = "public", table = "device_commands", filter = "device_id=eq.$deviceId") { change ->
                 try {
                     Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela device_commands")
                     
