@@ -681,9 +681,8 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Aplica configurações iniciais baseadas no status atual
      */
     private fun applyInitialSettings() {
-        // Atualiza visibilidade dos botões e círculo
+        // Atualiza visibilidade dos botões
         updateKioskButtonVisibility(isActive == true, kioskMode == true)
-        updateUnlockCircleVisibility()
         
         if (isActive == true) {
             // Aplica bloqueio e modo kiosk IMEDIATAMENTE quando is_active = true
