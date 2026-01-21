@@ -249,22 +249,34 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     private fun showUnlockHotspotSetupDialog() {
         AlertDialog.Builder(this)
             .setTitle("Configurar Área de Desbloqueio")
-            .setMessage("Escolha onde você quer configurar a área de desbloqueio. Depois, toque e segure por 5 segundos nesse local para desbloquear.")
-            .setItems(arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")) { _, which ->
+            .setMessage("Escolha onde você quer configurar a área de desbloqueio:\n\n• Canto Superior Esquerdo\n• Canto Superior Direito\n• Canto Inferior Esquerdo\n• Canto Inferior Direito\n\nDepois, toque e segure por 5 segundos nesse local para desbloquear.")
+            .setItems(arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")) { dialog, which ->
                 val positions = arrayOf("top_left", "top_right", "bottom_left", "bottom_right")
                 val positionNames = arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")
                 val selectedPosition = positions[which]
+                
+                // Salva a posição
                 preferenceManager.saveUnlockHotspotPosition(selectedPosition)
                 setupUnlockHotspot()
                 
-                // Mostra instrução para testar
+                // Fecha o diálogo primeiro
+                dialog.dismiss()
+                
+                // Mostra confirmação
                 AlertDialog.Builder(this)
-                    .setTitle("Área Configurada")
-                    .setMessage("Área configurada: ${positionNames[which]}\n\nToque e segure por 5 segundos nessa área para desbloquear.")
+                    .setTitle("Área Configurada!")
+                    .setMessage("Área configurada: ${positionNames[which]}\n\nAgora você pode tocar e segurar por 5 segundos nessa área para desbloquear.")
                     .setPositiveButton("OK", null)
                     .show()
+                
+                vibrateShort()
             }
-            .setCancelable(false)
+            .setCancelable(true)
+            .setOnCancelListener {
+                // Se cancelar, configura uma posição padrão
+                preferenceManager.saveUnlockHotspotPosition("bottom_right")
+                setupUnlockHotspot()
+            }
             .show()
     }
     
