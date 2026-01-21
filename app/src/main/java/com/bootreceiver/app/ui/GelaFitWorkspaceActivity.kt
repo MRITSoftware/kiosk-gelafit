@@ -38,7 +38,12 @@ import com.bootreceiver.app.utils.SupabaseManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -52,13 +57,14 @@ import kotlinx.coroutines.withContext
  */
 class GelaFitWorkspaceActivity : AppCompatActivity() {
     
-    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val supabaseManager = SupabaseManager()
     private lateinit var deviceId: String
     private lateinit var preferenceManager: PreferenceManager
     private var isActive: Boolean? = null
     private var kioskMode: Boolean? = null
     private var isMonitoring = false
+    private var realtimeJob: Job? = null // Job para gerenciar subscription Realtime
     private var isOpeningAllowedActivity = false // Flag para permitir abrir activities permitidas
     private lateinit var appsGridRecyclerView: RecyclerView
     private val selectedApps = mutableListOf<AppInfo>()
@@ -556,7 +562,8 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     }
     
     /**
-     * Inicia monitoramento do status is_active e modo_kiosk no Supabase
+     * Inicia monitoramento REALTIME do status is_active e modo_kiosk no Supabase
+     * Usa Supabase Realtime em vez de polling para receber mudanças instantaneamente
      */
     private fun startMonitoring() {
         if (isMonitoring) {
@@ -565,10 +572,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         }
         
         isMonitoring = true
+        
+        // Primeiro, busca status inicial do banco
         serviceScope.launch {
-            // Verifica status inicial DIRETAMENTE do banco (sem cache durante testes)
             try {
-                // Busca DIRETAMENTE do banco (conexão direta)
                 val status = withContext(Dispatchers.IO) {
                     supabaseManager.getDeviceStatus(deviceId)
                 }
@@ -598,81 +605,103 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 kioskMode = cachedKioskMode
                 applyInitialSettings()
             }
-            
-            // Loop de monitoramento contínuo
-            while (isMonitoring) {
-                try {
-                    // Busca DIRETAMENTE do banco a cada loop (conexão direta durante testes)
-                    val status = supabaseManager.getDeviceStatus(deviceId)
-                    val currentIsActive = status?.isActive ?: preferenceManager.getIsActiveCached()
-                    val currentKioskMode = status?.kioskMode ?: preferenceManager.getKioskModeCached()
-                    
-                    // Atualiza cache
-                    preferenceManager.saveIsActiveCached(currentIsActive)
-                    preferenceManager.saveKioskModeCached(currentKioskMode)
-                    preferenceManager.saveStatusLastSync(System.currentTimeMillis())
-                    Log.d(TAG, "Status atualizado do banco (loop) - is_active: $currentIsActive, modo_kiosk: $currentKioskMode")
-                    
-                    // Atualiza visibilidade dos botões e círculo
-                    updateKioskButtonVisibility(currentIsActive == true, currentKioskMode == true)
-                    
-                    // Se mudou o status, aplica as mudanças
-                    if (isActive != currentIsActive || kioskMode != currentKioskMode) {
-                        Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        if (currentIsActive == true) {
-                            Log.d(TAG, "🔒 IS_ACTIVE ATIVADO - Bloqueando acesso a outros apps e mantendo GelaFit Control em modo kiosk")
-                            applyAppBlocking()
-                            enableGelaFitKioskMode() // Mantém GelaFit Control em modo kiosk quando is_active = true
-                            showAppsGrid()
-                        } else {
-                            Log.d(TAG, "🔓 IS_ACTIVE DESATIVADO - Liberando acesso")
-                            removeAppBlocking()
-                            disableGelaFitKioskMode() // Remove modo kiosk do GelaFit Control quando is_active = false
-                            hideAppsGrid()
-                        }
+        }
+        
+        // Agora inicia subscription REALTIME
+        realtimeJob = serviceScope.launch {
+            try {
+                supabaseManager.subscribeToDeviceChanges(deviceId)
+                    .onEach { status ->
+                        // Recebe mudanças em tempo real do banco
+                        val currentIsActive = status.isActive
+                        val currentKioskMode = status.kioskMode
                         
-                        if (currentKioskMode == true) {
-                            Log.d(TAG, "🔒 MODO_KIOSK ATIVADO - App fixo na tela")
-                            enableKioskMode()
-                            // Quando modo_kiosk está ativo, abre o app automaticamente
-                            val targetPackage = preferenceManager.getTargetPackageName()
-                            if (!targetPackage.isNullOrEmpty()) {
-                                openConfiguredApp(targetPackage)
-                            }
-                        } else {
-                            Log.d(TAG, "🔓 MODO_KIOSK DESATIVADO")
-                            disableKioskMode()
-                            // Se is_active ainda está ativo, mantém modo kiosk do GelaFit Control
+                        Log.d(TAG, "🔄 REALTIME: Mudança detectada - is_active: $currentIsActive, modo_kiosk: $currentKioskMode")
+                        
+                        // Atualiza cache
+                        preferenceManager.saveIsActiveCached(currentIsActive)
+                        preferenceManager.saveKioskModeCached(currentKioskMode)
+                        preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                        
+                        // Atualiza visibilidade dos botões
+                        updateKioskButtonVisibility(currentIsActive == true, currentKioskMode == true)
+                        
+                        // Se mudou o status, aplica as mudanças
+                        if (isActive != currentIsActive || kioskMode != currentKioskMode) {
+                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                             if (currentIsActive == true) {
+                                Log.d(TAG, "🔒 IS_ACTIVE ATIVADO - Bloqueando acesso a outros apps e mantendo GelaFit Control em modo kiosk")
+                                applyAppBlocking()
                                 enableGelaFitKioskMode()
+                                showAppsGrid()
+                            } else {
+                                Log.d(TAG, "🔓 IS_ACTIVE DESATIVADO - Liberando acesso")
+                                removeAppBlocking()
+                                disableGelaFitKioskMode()
+                                hideAppsGrid()
                             }
+                            
+                            if (currentKioskMode == true) {
+                                Log.d(TAG, "🔒 MODO_KIOSK ATIVADO - App fixo na tela")
+                                enableKioskMode()
+                                val targetPackage = preferenceManager.getTargetPackageName()
+                                if (!targetPackage.isNullOrEmpty()) {
+                                    openConfiguredApp(targetPackage)
+                                }
+                            } else {
+                                Log.d(TAG, "🔓 MODO_KIOSK DESATIVADO")
+                                disableKioskMode()
+                                if (currentIsActive == true) {
+                                    enableGelaFitKioskMode()
+                                }
+                            }
+                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                            
+                            isActive = currentIsActive
+                            kioskMode = currentKioskMode
                         }
-                        Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         
-                        isActive = currentIsActive
-                        kioskMode = currentKioskMode
+                        // Garante que o app está em foreground se necessário
+                        if (currentKioskMode == true) {
+                            ensureAppInForeground()
+                        } else if (currentIsActive == true) {
+                            enableGelaFitKioskMode()
+                            ensureOnlyConfiguredAppIsOpen()
+                        } else {
+                            disableGelaFitKioskMode()
+                        }
                     }
-                    
-                    // Se modo_kiosk está ativo, garante que o app está sempre em foreground
-                    // Se apenas is_active está ativo, mantém modo kiosk do GelaFit Control e não força abertura do app (usuário escolhe pelo grid)
-                    if (currentKioskMode == true) {
-                        ensureAppInForeground()
-                    } else if (currentIsActive == true) {
-                        // Quando apenas is_active está ativo, garante que apenas o app configurado pode estar aberto
-                        // mas não força a abertura - o usuário escolhe pelo grid
-                        // Mantém modo kiosk do GelaFit Control ativo
-                        enableGelaFitKioskMode()
-                        ensureOnlyConfiguredAppIsOpen()
-                    } else {
-                        // Se is_active está desativado, remove modo kiosk do GelaFit Control
-                        disableGelaFitKioskMode()
+                    .catch { e ->
+                        Log.e(TAG, "❌ Erro no Realtime: ${e.message}", e)
+                        // Em caso de erro, tenta reconectar após delay
+                        delay(ERROR_RETRY_DELAY_MS)
+                        if (isMonitoring) {
+                            // Tenta reconectar
+                            realtimeJob?.cancel()
+                            startMonitoring()
+                        }
                     }
-                    
-                    delay(CHECK_INTERVAL_MS)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Erro no monitoramento: ${e.message}", e)
-                    delay(ERROR_RETRY_DELAY_MS)
-                }
+                    .launchIn(this)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Erro ao iniciar subscription Realtime: ${e.message}", e)
+                isMonitoring = false
+            }
+        }
+    }
+    
+    /**
+     * Para o monitoramento Realtime
+     */
+    private fun stopMonitoring() {
+        isMonitoring = false
+        realtimeJob?.cancel()
+        realtimeJob = null
+        
+        serviceScope.launch {
+            try {
+                supabaseManager.unsubscribeFromDeviceChanges(deviceId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao parar monitoramento: ${e.message}", e)
             }
         }
     }
@@ -969,6 +998,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         
+        // Para monitoramento Realtime
+        stopMonitoring()
+        
         // Desregistra receiver
         try {
             unregisterReceiver(appAddedReceiver)
@@ -988,6 +1020,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             startActivity(intent)
             return
         }
+        
+        // Cancela scope
+        serviceScope.cancel()
         
         Log.d(TAG, "⚠️ GelaFitWorkspaceActivity destruída")
         isMonitoring = false

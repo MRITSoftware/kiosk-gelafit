@@ -7,7 +7,11 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChanges
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
@@ -18,6 +22,8 @@ import kotlinx.serialization.Serializable
  * dispositivos na tabela 'devices'
  */
 class SupabaseManager {
+    
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     val client: SupabaseClient = createSupabaseClient(
         supabaseUrl = SUPABASE_URL,
@@ -495,6 +501,67 @@ class SupabaseManager {
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao registrar dispositivo: ${e.message}", e)
             false
+        }
+    }
+    
+    /**
+     * Cria um Flow que escuta mudanças em tempo real na tabela devices para um device_id específico
+     * 
+     * @param deviceId ID único do dispositivo para filtrar mudanças
+     * @return Flow que emite DeviceStatus quando há mudanças no banco
+     */
+    fun subscribeToDeviceChanges(deviceId: String): Flow<DeviceStatus> = callbackFlow {
+        val channel = client.channel("device_changes_$deviceId")
+        
+        try {
+            channel.postgresChanges<Device>(
+                schema = "public",
+                table = "devices",
+                filter = "device_id=eq.$deviceId"
+            ) { change ->
+                Log.d(TAG, "🔄 Mudança detectada no dispositivo $deviceId: ${change.eventType}")
+                val device = change.newRecord ?: change.oldRecord
+                if (device != null) {
+                    val status = DeviceStatus(
+                        isActive = device.is_active,
+                        kioskMode = device.kiosk_mode ?: false
+                    )
+                    trySend(status)
+                } else {
+                    // Se não há dados, busca do banco
+                    serviceScope.launch(Dispatchers.IO) {
+                        val status = getDeviceStatus(deviceId)
+                        trySend(status ?: DeviceStatus(isActive = false, kioskMode = false))
+                    }
+                }
+            }
+            
+            channel.subscribe()
+            Log.d(TAG, "✅ Subscrito ao Realtime para dispositivo: $deviceId")
+            
+            // Mantém o Flow aberto até ser cancelado
+            awaitClose {
+                channel.unsubscribe()
+                Log.d(TAG, "🔌 Desconectado do Realtime para dispositivo: $deviceId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Erro ao criar subscription Realtime: ${e.message}", e)
+            close(e)
+        }
+    }
+    
+    /**
+     * Remove a subscrição de mudanças em tempo real
+     * 
+     * @param deviceId ID único do dispositivo
+     */
+    suspend fun unsubscribeFromDeviceChanges(deviceId: String) {
+        try {
+            val channel = client.channel("device_changes_$deviceId")
+            channel.unsubscribe()
+            Log.d(TAG, "🔌 Desconectado do Realtime para dispositivo: $deviceId")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Erro ao desconectar do Realtime: ${e.message}", e)
         }
     }
     
