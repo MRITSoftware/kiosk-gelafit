@@ -457,13 +457,12 @@ class SupabaseManager {
             }
             
             if (existingDevice != null) {
-                // Dispositivo já existe, atualiza last_seen, unit_name, is_active e kiosk_mode
-                // IMPORTANTE: NUNCA altera o device_id. Seta is_active=true e kiosk_mode=false ao atualizar
-                Log.d(TAG, "Dispositivo já existe (device_id: ${existingDevice.device_id}, kiosk_mode: ${existingDevice.kiosk_mode}, is_active: ${existingDevice.is_active}). Atualizando unit_name/last_seen, setando is_active=true e kiosk_mode=false...")
+                // Dispositivo já existe, atualiza apenas last_seen e unit_name
+                // IMPORTANTE: NUNCA altera is_active ou kiosk_mode ao atualizar registro
+                // Esses valores só mudam via ações do usuário (botões)
+                Log.d(TAG, "Dispositivo já existe (device_id: ${existingDevice.device_id}). Atualizando apenas unit_name/last_seen...")
                 val updateData = mutableMapOf<String, Any>(
-                    "last_seen" to java.time.Instant.now().toString(),
-                    "is_active" to true,  // Sempre seta is_active como true ao atualizar
-                    "kiosk_mode" to false // Sempre seta kiosk_mode como false ao atualizar
+                    "last_seen" to java.time.Instant.now().toString()
                 )
                 
                 if (unitName != null && unitName.isNotBlank()) {
@@ -471,6 +470,7 @@ class SupabaseManager {
                 }
                 
                 // CRÍTICO: Sempre atualiza pelo device_id original do banco, nunca cria novo
+                // NÃO altera is_active ou kiosk_mode aqui
                 client.from("devices")
                     .update(updateData) {
                         filter {
@@ -478,21 +478,22 @@ class SupabaseManager {
                         }
                     }
                 
-                Log.d(TAG, "✅ Dispositivo atualizado (device_id mantido: ${existingDevice.device_id}), is_active=true, kiosk_mode=false")
+                Log.d(TAG, "✅ Dispositivo atualizado (device_id mantido: ${existingDevice.device_id})")
             } else {
-                // Novo dispositivo, cria registro
+                // Novo dispositivo, cria registro com is_active=false
+                // is_active só pode ser true DEPOIS do primeiro acesso (após selecionar app)
                 Log.d(TAG, "Criando novo registro de dispositivo com device_id: $deviceId")
                 val newDevice = Device(
                     device_id = deviceId, // Usa o device_id fornecido
                     unit_name = unitName,
-                    is_active = true,  // Por padrão, dispositivo é criado como ativo
+                    is_active = false,  // Sempre inicia como false - só fica true após primeiro acesso
                     kiosk_mode = false // Kiosk sempre inicia desativado; só ativa via botão
                 )
                 
                 client.from("devices")
                     .insert(newDevice)
                 
-                Log.d(TAG, "✅ Dispositivo registrado com sucesso! (device_id: $deviceId, kiosk_mode: false)")
+                Log.d(TAG, "✅ Dispositivo registrado com sucesso! (device_id: $deviceId, is_active=false, kiosk_mode=false)")
             }
             
             true
@@ -503,40 +504,101 @@ class SupabaseManager {
     }
     
     /**
-     * Cria um Flow que verifica mudanças periodicamente na tabela devices
-     * Usa polling otimizado (a cada 5 segundos) - emite apenas quando há mudança real
-     * 
-     * NOTA: A API Realtime do Supabase Kotlin (v2.3.0) não expõe funções públicas
-     * para postgres changes de forma direta. Por enquanto, usamos polling otimizado
-     * que reduz significativamente as requisições (de 60/min para 12/min).
-     * 
-     * Quando a API Realtime estiver disponível ou documentada, podemos migrar facilmente.
+     * Cria um Flow que usa cache local e sincroniza com o banco a cada 15 minutos
+     * Primeiro acesso busca do banco e salva no cache
+     * Depois usa cache local e sincroniza periodicamente
      * 
      * @param deviceId ID único do dispositivo para filtrar mudanças
+     * @param preferenceManager Gerenciador de preferências para cache
      * @return Flow que emite DeviceStatus quando há mudanças no banco
      */
-    fun subscribeToDeviceChanges(deviceId: String): Flow<DeviceStatus> {
+    fun subscribeToDeviceChanges(deviceId: String, preferenceManager: com.bootreceiver.app.utils.PreferenceManager): Flow<DeviceStatus> {
         return flow {
-            var lastStatus: DeviceStatus? = null
+            val SYNC_INTERVAL_MS = 15 * 60 * 1000L // 15 minutos
             
+            // Primeiro acesso: busca do banco e salva no cache
+            var lastStatus: DeviceStatus? = null
+            try {
+                val initialStatus = withContext(Dispatchers.IO) {
+                    getDeviceStatus(deviceId)
+                }
+                val currentStatus = initialStatus ?: DeviceStatus(isActive = false, kioskMode = false)
+                
+                // Salva no cache
+                preferenceManager.saveIsActiveCached(currentStatus.isActive)
+                preferenceManager.saveKioskModeCached(currentStatus.kioskMode)
+                preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                
+                lastStatus = currentStatus
+                Log.d(TAG, "📊 Status inicial do banco - is_active: ${currentStatus.isActive}, modo_kiosk: ${currentStatus.kioskMode}")
+                emit(currentStatus)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Erro ao buscar status inicial: ${e.message}", e)
+                // Em caso de erro, usa cache local
+                val cachedIsActive = preferenceManager.getIsActiveCached()
+                val cachedKioskMode = preferenceManager.getKioskModeCached()
+                val cachedStatus = DeviceStatus(isActive = cachedIsActive, kioskMode = cachedKioskMode)
+                lastStatus = cachedStatus
+                Log.d(TAG, "📦 Usando cache local - is_active: $cachedIsActive, modo_kiosk: $cachedKioskMode")
+                emit(cachedStatus)
+            }
+            
+            // Loop de sincronização periódica
             while (true) {
                 try {
-                    val status = withContext(Dispatchers.IO) {
-                        getDeviceStatus(deviceId)
-                    }
-                    val currentStatus = status ?: DeviceStatus(isActive = false, kioskMode = false)
+                    val lastSync = preferenceManager.getStatusLastSync()
+                    val now = System.currentTimeMillis()
+                    val needsSync = (now - lastSync) >= SYNC_INTERVAL_MS
                     
-                    // Só emite se mudou (otimização - evita processamento desnecessário)
-                    if (lastStatus == null || lastStatus != currentStatus) {
-                        Log.d(TAG, "🔄 Status atualizado - is_active: ${currentStatus.isActive}, modo_kiosk: ${currentStatus.kioskMode}")
-                        emit(currentStatus)
-                        lastStatus = currentStatus
+                    if (needsSync) {
+                        // Sincroniza com o banco
+                        Log.d(TAG, "🔄 Sincronizando com banco (última sync: ${(now - lastSync) / 1000}s atrás)...")
+                        val status = withContext(Dispatchers.IO) {
+                            getDeviceStatus(deviceId)
+                        }
+                        val currentStatus = status ?: DeviceStatus(isActive = false, kioskMode = false)
+                        
+                        // Atualiza cache
+                        preferenceManager.saveIsActiveCached(currentStatus.isActive)
+                        preferenceManager.saveKioskModeCached(currentStatus.kioskMode)
+                        preferenceManager.saveStatusLastSync(now)
+                        
+                        // Só emite se mudou
+                        if (lastStatus == null || lastStatus != currentStatus) {
+                            Log.d(TAG, "🔄 Status atualizado após sync - is_active: ${currentStatus.isActive}, modo_kiosk: ${currentStatus.kioskMode}")
+                            emit(currentStatus)
+                            lastStatus = currentStatus
+                        } else {
+                            Log.d(TAG, "✅ Cache sincronizado (sem mudanças)")
+                        }
+                    } else {
+                        // Usa cache local
+                        val cachedIsActive = preferenceManager.getIsActiveCached()
+                        val cachedKioskMode = preferenceManager.getKioskModeCached()
+                        val cachedStatus = DeviceStatus(isActive = cachedIsActive, kioskMode = cachedKioskMode)
+                        
+                        // Só emite se mudou em relação ao último emitido
+                        if (lastStatus == null || lastStatus != cachedStatus) {
+                            Log.d(TAG, "📦 Status do cache - is_active: $cachedIsActive, modo_kiosk: $cachedKioskMode")
+                            emit(cachedStatus)
+                            lastStatus = cachedStatus
+                        }
                     }
                     
-                    delay(5000) // Verifica a cada 5 segundos (reduz requisições de 60/min para 12/min)
+                    delay(60000) // Verifica a cada 1 minuto se precisa sincronizar
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Erro ao verificar status: ${e.message}", e)
-                    delay(10000) // Em caso de erro, aguarda mais tempo
+                    // Em caso de erro, usa cache local
+                    val cachedIsActive = preferenceManager.getIsActiveCached()
+                    val cachedKioskMode = preferenceManager.getKioskModeCached()
+                    val cachedStatus = DeviceStatus(isActive = cachedIsActive, kioskMode = cachedKioskMode)
+                    
+                    if (lastStatus == null || lastStatus != cachedStatus) {
+                        emit(cachedStatus)
+                        lastStatus = cachedStatus
+                    }
+                    
+                    delay(60000) // Em caso de erro, aguarda 1 minuto
                 }
             }
         }

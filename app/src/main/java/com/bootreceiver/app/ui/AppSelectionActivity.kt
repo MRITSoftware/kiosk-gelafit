@@ -132,8 +132,9 @@ class AppSelectionActivity : AppCompatActivity() {
                     } catch (e: Exception) {
                         Log.w(TAG, "Erro ao carregar status após registro: ${e.message}")
                         // Define valores padrão no cache caso não consiga buscar do banco
-                        preferenceManager.saveIsActiveCached(true)  // Padrão após registro
-                        preferenceManager.saveKioskModeCached(false)  // Padrão após registro
+                        // is_active deve ser false inicialmente (só fica true após primeiro acesso)
+                        preferenceManager.saveIsActiveCached(false)  // Sempre false após registro
+                        preferenceManager.saveKioskModeCached(false)  // Sempre false após registro
                     }
                     
                     Toast.makeText(
