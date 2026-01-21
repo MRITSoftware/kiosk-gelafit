@@ -328,6 +328,36 @@ class SupabaseManager {
     }
     
     /**
+     * Atualiza o modo kiosk do dispositivo
+     * 
+     * @param deviceId ID único do dispositivo
+     * @param kioskMode true para ativar, false para desativar
+     * @return true se atualizou com sucesso, false caso contrário
+     */
+    suspend fun updateKioskMode(deviceId: String, kioskMode: Boolean): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "📝 Atualizando kiosk_mode para dispositivo: $deviceId -> $kioskMode")
+            
+            val updateData = mapOf(
+                "kiosk_mode" to kioskMode
+            )
+            
+            client.from("devices")
+                .update(updateData) {
+                    filter {
+                        eq("device_id", deviceId)
+                    }
+                }
+            
+            Log.d(TAG, "✅ kiosk_mode atualizado com sucesso")
+            return@withContext true
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Erro ao atualizar kiosk_mode: ${e.message}", e)
+            return@withContext false
+        }
+    }
+    
+    /**
      * Registra ou atualiza um dispositivo na tabela devices
      * 
      * @param deviceId ID único do dispositivo (Android ID)
@@ -426,7 +456,8 @@ class SupabaseManager {
                 val newDevice = Device(
                     device_id = deviceId,
                     unit_name = unitName,
-                    is_active = true  // Por padrão, dispositivo é criado como ativo
+                    is_active = true,  // Por padrão, dispositivo é criado como ativo
+                    kiosk_mode = false // Kiosk sempre inicia desativado; só ativa via botão
                 )
                 
                 client.from("devices")
