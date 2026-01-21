@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.view.MotionEvent
 import android.view.KeyEvent
@@ -185,6 +187,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
 
                 // Atualiza UI
                 runOnUiThread {
+                    vibrateShort()
                     updateKioskButtonVisibility(false, false)
                     hideAppsGrid()
                     AlertDialog.Builder(this@GelaFitWorkspaceActivity)
@@ -208,49 +211,63 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         }
     }
     
+    private fun vibrateShort() {
+        try {
+            val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(100)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     /**
      * Ativa o modo kiosk do app escolhido
      */
     private fun activateKioskMode() {
-        serviceScope.launch {
-            try {
-                // Ativa kiosk_mode no Supabase
-                val success = withContext(Dispatchers.IO) {
-                    supabaseManager.updateKioskMode(deviceId, true)
-                }
-                
-                if (success) {
-                    val targetPackage = preferenceManager.getTargetPackageName()
-                    if (!targetPackage.isNullOrEmpty()) {
-                        openConfiguredApp(targetPackage)
+        AlertDialog.Builder(this)
+            .setTitle("Ativar modo kiosk?")
+            .setMessage("O app ficará fixo na tela. Deseja ativar?")
+            .setPositiveButton("Ativar") { _, _ ->
+                serviceScope.launch {
+                    try {
+                        val success = withContext(Dispatchers.IO) {
+                            supabaseManager.updateKioskMode(deviceId, true)
+                        }
+                        
+                        if (success) {
+                            preferenceManager.saveKioskModeCached(true)
+                            preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                            val targetPackage = preferenceManager.getTargetPackageName()
+                            if (!targetPackage.isNullOrEmpty()) {
+                                openConfiguredApp(targetPackage)
+                            }
+                        } else {
+                            runOnUiThread {
+                                AlertDialog.Builder(this@GelaFitWorkspaceActivity)
+                                    .setTitle("Erro")
+                                    .setMessage("Não foi possível ativar o modo kiosk no servidor.")
+                                    .setPositiveButton("OK", null)
+                                    .show()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro ao ativar modo kiosk: ${e.message}", e)
                         runOnUiThread {
                             AlertDialog.Builder(this@GelaFitWorkspaceActivity)
-                                .setTitle("Modo Kiosk Ativado")
-                                .setMessage("O modo kiosk foi ativado. O app ficará fixo na tela.")
+                                .setTitle("Erro")
+                                .setMessage("Não foi possível ativar o modo kiosk: ${e.message}")
                                 .setPositiveButton("OK", null)
                                 .show()
                         }
                     }
-                } else {
-                    runOnUiThread {
-                        AlertDialog.Builder(this@GelaFitWorkspaceActivity)
-                            .setTitle("Erro")
-                            .setMessage("Não foi possível ativar o modo kiosk no servidor.")
-                            .setPositiveButton("OK", null)
-                            .show()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao ativar modo kiosk: ${e.message}", e)
-                runOnUiThread {
-                    AlertDialog.Builder(this@GelaFitWorkspaceActivity)
-                        .setTitle("Erro")
-                        .setMessage("Não foi possível ativar o modo kiosk: ${e.message}")
-                        .setPositiveButton("OK", null)
-                        .show()
                 }
             }
-        }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
     
     /**

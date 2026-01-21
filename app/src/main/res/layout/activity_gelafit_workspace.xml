@@ -36,11 +36,13 @@
             android:contentDescription="Menu"
             android:tint="#FFFFFF" />
 
-        <!-- Área oculta para desbloqueio (long press 5s no canto superior direito) -->
+        <!-- Área oculta para desbloqueio (long press 5s no canto inferior direito) -->
         <View
             android:id="@+id/unlockHotspot"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentEnd="true"
             android:contentDescription="Unlock Area"
             android:background="@android:color/transparent" />
 

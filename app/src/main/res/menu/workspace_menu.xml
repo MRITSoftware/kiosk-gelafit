@@ -5,5 +5,5 @@
         android:title="Verificar Configurações" />
     <item
         android:id="@+id/menu_add_product"
-        android:title="Adicionar Produto ao Grid" />
+        android:title="Adicionar app" />
 </menu>
