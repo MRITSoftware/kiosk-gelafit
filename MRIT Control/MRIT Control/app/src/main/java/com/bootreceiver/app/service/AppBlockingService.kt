@@ -23,11 +23,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * ServiÃ§o que monitora e bloqueia acesso a outros apps quando is_active = true
+ * Serviço que monitora e bloqueia acesso a outros apps quando is_active = true
  * 
- * Este serviÃ§o:
- * 1. Monitora constantemente qual app estÃ¡ em foreground
- * 2. Se is_active = true e outro app (nÃ£o autorizado) estiver aberto, fecha e reabre o app configurado
+ * Este serviço:
+ * 1. Monitora constantemente qual app está em foreground
+ * 2. Se is_active = true e outro app (não autorizado) estiver aberto, fecha e reabre o app configurado
  * 3. Previne que outros apps sejam abertos quando is_active = true
  */
 class AppBlockingService : Service() {
@@ -38,9 +38,9 @@ class AppBlockingService : Service() {
     private lateinit var deviceId: String
     private lateinit var preferenceManager: PreferenceManager
     private val allowedPackages = setOf(
-        "com.bootreceiver.app",  // PrÃ³prio GelaFit Control
-        "com.android.settings",  // ConfiguraÃ§Ãµes (pode ser necessÃ¡rio)
-        "com.android.systemui"    // System UI (necessÃ¡rio para funcionamento do sistema)
+        "com.bootreceiver.app",  // Próprio GelaFit Control
+        "com.android.settings",  // Configurações (pode ser necessário)
+        "com.android.systemui"    // System UI (necessário para funcionamento do sistema)
     )
     
     override fun onBind(intent: Intent?): IBinder? = null
@@ -56,19 +56,18 @@ class AppBlockingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val newIsActive = intent?.getBooleanExtra("is_active", false) ?: false
         
-        if (isActive != newIsActive) {
-            isActive = newIsActive
-            Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
-            if (isActive) {
-                Log.d(TAG, "ðŸ”’ BLOQUEIO DE APPS ATIVADO")
-                Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
-            } else {
-                Log.d(TAG, "ðŸ”“ BLOQUEIO DE APPS DESATIVADO")
-                Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
-            }
+        Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        if (newIsActive) {
+            Log.d(TAG, "🔒 BLOQUEIO DE APPS ATIVADO")
+            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        } else {
+            Log.d(TAG, "🔓 BLOQUEIO DE APPS DESATIVADO")
+            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         }
         
-        if (!isRunning && isActive) {
+        isActive = newIsActive
+        
+        if (isActive && !isRunning) {
             try {
                 isRunning = true
                 Log.d(TAG, "AppBlockingService iniciado")
@@ -89,12 +88,13 @@ class AppBlockingService : Service() {
                     startMonitoring()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Erro crÃ­tico ao iniciar serviÃ§o: ${e.message}", e)
+                Log.e(TAG, "Erro crítico ao iniciar serviço: ${e.message}", e)
                 isRunning = false
             }
-        } else if (!isActive) {
-            // Se is_active foi desativado, para o serviÃ§o
-            Log.d(TAG, "is_active desativado - parando serviÃ§o")
+        } else if (!isActive && isRunning) {
+            // Se is_active foi desativado, para o serviço
+            Log.d(TAG, "is_active desativado - parando serviço")
+            isRunning = false
             stopSelf()
         }
         
@@ -158,18 +158,18 @@ class AppBlockingService : Service() {
                     continue
                 }
                 
-                // Verifica qual app estÃ¡ em foreground
+                // Verifica qual app está em foreground
                 val foregroundPackage = getForegroundPackage()
                 
                 if (foregroundPackage != null) {
-                    // Se nÃ£o Ã© o app configurado nem um app permitido, bloqueia
+                    // Se não é o app configurado nem um app permitido, bloqueia
                     if (foregroundPackage != targetPackage && !allowedPackages.contains(foregroundPackage)) {
-                        Log.w(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
-                        Log.w(TAG, "ðŸš« APP NÃƒO AUTORIZADO DETECTADO: $foregroundPackage")
-                        Log.w(TAG, "ðŸ”„ Fechando e reabrindo app configurado...")
-                        Log.w(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                        Log.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        Log.w(TAG, "🚫 APP NÃO AUTORIZADO DETECTADO: $foregroundPackage")
+                        Log.w(TAG, "🔄 Fechando e reabrindo app configurado...")
+                        Log.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         
-                        // Fecha o app nÃ£o autorizado
+                        // Fecha o app não autorizado
                         closeApp(foregroundPackage)
                         
                         // Aguarda um pouco e reabre o app configurado
@@ -190,7 +190,7 @@ class AppBlockingService : Service() {
     }
     
     /**
-     * ObtÃ©m o package name do app que estÃ¡ em foreground
+     * Obtém o package name do app que está em foreground
      */
     private fun getForegroundPackage(): String? {
         try {
@@ -223,7 +223,7 @@ class AppBlockingService : Service() {
     }
     
     /**
-     * Fecha um app especÃ­fico
+     * Fecha um app específico
      */
     private fun closeApp(packageName: String) {
         try {
@@ -234,13 +234,13 @@ class AppBlockingService : Service() {
                 activityManager.killBackgroundProcesses(packageName)
             }
             
-            // Tenta fechar usando am force-stop (requer permissÃ£o)
+            // Tenta fechar usando am force-stop (requer permissão)
             try {
                 val process = Runtime.getRuntime().exec("am force-stop $packageName")
                 process.waitFor()
-                Log.d(TAG, "âœ… App $packageName fechado")
+                Log.d(TAG, "✅ App $packageName fechado")
             } catch (e: Exception) {
-                Log.w(TAG, "NÃ£o foi possÃ­vel fechar app usando force-stop: ${e.message}")
+                Log.w(TAG, "Não foi possível fechar app usando force-stop: ${e.message}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao fechar app: ${e.message}", e)
@@ -256,9 +256,9 @@ class AppBlockingService : Service() {
             val success = appLauncher.launchApp(packageName)
             
             if (success) {
-                Log.d(TAG, "âœ… App configurado reaberto: $packageName")
+                Log.d(TAG, "✅ App configurado reaberto: $packageName")
             } else {
-                Log.e(TAG, "âŒ Falha ao reabrir app configurado")
+                Log.e(TAG, "❌ Falha ao reabrir app configurado")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Erro ao abrir app configurado: ${e.message}", e)
@@ -267,15 +267,15 @@ class AppBlockingService : Service() {
     
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "âš ï¸ AppBlockingService destruÃ­do")
+        Log.d(TAG, "⚠️ AppBlockingService destruído")
         isRunning = false
     }
     
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Log.d(TAG, "âš ï¸ App removido da lista de tarefas - mas serviÃ§o continua rodando")
+        Log.d(TAG, "⚠️ App removido da lista de tarefas - mas serviço continua rodando")
         
-        // Reinicia o serviÃ§o se is_active ainda estiver ativo
+        // Reinicia o serviço se is_active ainda estiver ativo
         if (isActive) {
             val restartIntent = Intent(this, AppBlockingService::class.java).apply {
                 putExtra("is_active", true)
@@ -292,7 +292,7 @@ class AppBlockingService : Service() {
         private const val TAG = "AppBlockingService"
         private const val CHANNEL_ID = "app_blocking_channel"
         private const val NOTIFICATION_ID = 3
-        private const val CHECK_INTERVAL_MS = 1000L // Verifica a cada 1 segundo (muito rÃ¡pido)
+        private const val CHECK_INTERVAL_MS = 1000L // Verifica a cada 1 segundo (muito rápido)
         private const val ERROR_RETRY_DELAY_MS = 5000L // Em caso de erro, aguarda 5 segundos
     }
 }

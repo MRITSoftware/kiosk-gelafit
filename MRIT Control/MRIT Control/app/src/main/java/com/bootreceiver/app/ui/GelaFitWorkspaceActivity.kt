@@ -60,7 +60,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         Log.d(TAG, "📱 App configurado: $targetPackage")
         Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        // Inicia monitoramento de is_active
+        // Inicia monitoramento de is_active (verifica status inicial também)
         startMonitoring()
         
         // Abre o app configurado
@@ -116,6 +116,24 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         
         isMonitoring = true
         serviceScope.launch {
+            // Verifica status inicial imediatamente
+            try {
+                val initialIsActive = supabaseManager.getIsActive(deviceId)
+                Log.d(TAG, "Status inicial de is_active: $initialIsActive")
+                
+                // Aplica bloqueio imediatamente se já estiver ativo
+                if (initialIsActive == true) {
+                    Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    Log.d(TAG, "🔒 IS_ACTIVE JÁ ESTÁ ATIVO - Aplicando bloqueio imediatamente")
+                    Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    applyAppBlocking()
+                }
+                isActive = initialIsActive
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao verificar status inicial: ${e.message}", e)
+            }
+            
+            // Loop de monitoramento contínuo
             while (isMonitoring) {
                 try {
                     val currentIsActive = supabaseManager.getIsActive(deviceId)
