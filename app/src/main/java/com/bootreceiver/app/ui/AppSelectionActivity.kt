@@ -359,6 +359,11 @@ class AppSelectionActivity : AppCompatActivity() {
         // Salva o package name
         preferenceManager.saveTargetPackageName(packageName)
         
+        // Adiciona à lista de apps selecionados para o grid
+        val currentApps = preferenceManager.getSelectedAppsList().toMutableSet()
+        currentApps.add(packageName)
+        preferenceManager.saveSelectedAppsList(currentApps)
+        
         Toast.makeText(
             this,
             "App configurado: $appName\nO app será aberto automaticamente no próximo boot.",

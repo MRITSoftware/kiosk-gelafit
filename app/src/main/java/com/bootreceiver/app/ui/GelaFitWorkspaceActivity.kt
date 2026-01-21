@@ -247,37 +247,116 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Mostra diálogo para configurar área de desbloqueio na primeira vez
      */
     private fun showUnlockHotspotSetupDialog() {
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Configurar Área de Desbloqueio")
-            .setMessage("Escolha onde você quer configurar a área de desbloqueio:\n\n• Canto Superior Esquerdo\n• Canto Superior Direito\n• Canto Inferior Esquerdo\n• Canto Inferior Direito\n\nDepois, toque e segure por 5 segundos nesse local para desbloquear.")
-            .setItems(arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")) { dialog, which ->
-                val positions = arrayOf("top_left", "top_right", "bottom_left", "bottom_right")
-                val positionNames = arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")
-                val selectedPosition = positions[which]
-                
-                // Salva a posição
-                preferenceManager.saveUnlockHotspotPosition(selectedPosition)
-                setupUnlockHotspot()
-                
-                // Fecha o diálogo primeiro
+            .setMessage("Toque e segure por 5 segundos em QUALQUER CANTO da tela onde você quer configurar a área de desbloqueio.\n\nOs 4 cantos estão disponíveis:\n• Superior Esquerdo\n• Superior Direito\n• Inferior Esquerdo\n• Inferior Direito")
+            .setPositiveButton("Entendi, vou tocar na tela", null)
+            .setCancelable(false)
+            .create()
+        
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 dialog.dismiss()
-                
-                // Mostra confirmação
-                AlertDialog.Builder(this)
-                    .setTitle("Área Configurada!")
-                    .setMessage("Área configurada: ${positionNames[which]}\n\nAgora você pode tocar e segurar por 5 segundos nessa área para desbloquear.")
-                    .setPositiveButton("OK", null)
-                    .show()
-                
-                vibrateShort()
+                startUnlockHotspotSelection()
             }
-            .setCancelable(true)
-            .setOnCancelListener {
-                // Se cancelar, configura uma posição padrão
-                preferenceManager.saveUnlockHotspotPosition("bottom_right")
-                setupUnlockHotspot()
+        }
+        
+        dialog.show()
+    }
+    
+    private var hotspotSelectionHandler: Handler? = null
+    private var hotspotSelectionRunnable: Runnable? = null
+    
+    /**
+     * Inicia a seleção da área de desbloqueio tocando diretamente na tela
+     */
+    private fun startUnlockHotspotSelection() {
+        // Mostra instrução visual
+        val instructionDialog = AlertDialog.Builder(this)
+            .setTitle("Configurando Área de Desbloqueio")
+            .setMessage("Toque e segure por 5 segundos em QUALQUER CANTO da tela onde você quer configurar a área de desbloqueio.")
+            .setCancelable(false)
+            .create()
+        
+        instructionDialog.show()
+        
+        // Configura listener para toda a tela
+        val rootView = findViewById<ViewGroup>(android.R.id.content)
+        var touchStartTime = 0L
+        var touchX = 0f
+        var touchY = 0f
+        
+        val touchListener = View.OnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchStartTime = System.currentTimeMillis()
+                    touchX = event.x
+                    touchY = event.y
+                    
+                    // Inicia contagem regressiva visual
+                    hotspotSelectionHandler = Handler(Looper.getMainLooper())
+                    var countdown = 5
+                    hotspotSelectionRunnable = object : Runnable {
+                        override fun run() {
+                            val elapsed = (System.currentTimeMillis() - touchStartTime) / 1000
+                            if (elapsed >= 5) {
+                                // Completo! Determina qual canto foi tocado
+                                val screenWidth = resources.displayMetrics.widthPixels
+                                val screenHeight = resources.displayMetrics.heightPixels
+                                val centerX = screenWidth / 2
+                                val centerY = screenHeight / 2
+                                
+                                val position = when {
+                                    touchX < centerX && touchY < centerY -> "top_left"
+                                    touchX >= centerX && touchY < centerY -> "top_right"
+                                    touchX < centerX && touchY >= centerY -> "bottom_left"
+                                    else -> "bottom_right"
+                                }
+                                
+                                val positionNames = mapOf(
+                                    "top_left" to "Canto Superior Esquerdo",
+                                    "top_right" to "Canto Superior Direito",
+                                    "bottom_left" to "Canto Inferior Esquerdo",
+                                    "bottom_right" to "Canto Inferior Direito"
+                                )
+                                
+                                // Salva a posição
+                                preferenceManager.saveUnlockHotspotPosition(position)
+                                setupUnlockHotspot()
+                                
+                                // Remove listener
+                                rootView.setOnTouchListener(null)
+                                instructionDialog.dismiss()
+                                
+                                // Mostra confirmação
+                                AlertDialog.Builder(this@GelaFitWorkspaceActivity)
+                                    .setTitle("Área Configurada!")
+                                    .setMessage("Área configurada: ${positionNames[position]}\n\nAgora você pode tocar e segurar por 5 segundos nessa área para desbloquear.")
+                                    .setPositiveButton("OK", null)
+                                    .show()
+                                
+                                vibrateShort()
+                            } else {
+                                hotspotSelectionHandler?.postDelayed(this, 100)
+                            }
+                        }
+                    }
+                    hotspotSelectionHandler?.post(hotspotSelectionRunnable!!)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // Cancela se soltar antes de 5 segundos
+                    hotspotSelectionHandler?.removeCallbacks(hotspotSelectionRunnable!!)
+                    rootView.setOnTouchListener(null)
+                    instructionDialog.dismiss()
+                    Toast.makeText(this@GelaFitWorkspaceActivity, "Segure por 5 segundos completos", Toast.LENGTH_SHORT).show()
+                    true
+                }
+                else -> false
             }
-            .show()
+        }
+        
+        rootView.setOnTouchListener(touchListener)
     }
     
     /**
@@ -710,41 +789,8 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Adiciona um app ao grid e atualiza imediatamente
      */
     fun addAppToGrid(packageName: String) {
-        serviceScope.launch {
-            try {
-                val appInfo = withContext(Dispatchers.IO) {
-                    try {
-                        val pm = packageManager
-                        val info = pm.getApplicationInfo(packageName, 0)
-                        val appName = pm.getApplicationLabel(info).toString()
-                        AppInfo(appName, packageName)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Erro ao carregar info do app: ${e.message}", e)
-                        null
-                    }
-                }
-                
-                if (appInfo != null) {
-                    // Adiciona à lista local
-                    if (!selectedApps.any { it.packageName == packageName }) {
-                        selectedApps.add(appInfo)
-                    }
-                    
-                    // Salva na lista persistente
-                    val currentApps = preferenceManager.getSelectedAppsList().toMutableSet()
-                    currentApps.add(packageName)
-                    preferenceManager.saveSelectedAppsList(currentApps)
-                    
-                    // Atualiza o grid imediatamente
-                    runOnUiThread {
-                        appsGridRecyclerView.adapter?.notifyDataSetChanged()
-                        Log.d(TAG, "App adicionado ao grid: ${appInfo.name}")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao adicionar app ao grid: ${e.message}", e)
-            }
-        }
+        // Recarrega todos os apps da lista persistente para garantir que todos apareçam
+        loadSelectedApps()
     }
     
     /**
@@ -1149,21 +1195,31 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         
-        // Verifica se está desbloqueado individualmente
+        // Verifica se está desbloqueado individualmente (usa cache local para resposta imediata)
         val gelafitUnlocked = preferenceManager.isGelaFitUnlocked()
         val targetAppUnlocked = preferenceManager.isTargetAppUnlocked()
         
         // Se is_active está ativo E não está desbloqueado, impede que a activity seja pausada (minimizada)
         if (isActive == true && !gelafitUnlocked && kioskMode != true) {
             Log.d(TAG, "🔒 Tentativa de pausar bloqueada (is_active = true, não desbloqueado)")
-            // Não abre o app, apenas mostra o grid
-            showAppsGrid()
+            // Reabre imediatamente usando Handler para resposta mais rápida
+            Handler(Looper.getMainLooper()).postDelayed({
+                showAppsGrid()
+                // Garante que a activity está em foreground
+                if (!isFinishing) {
+                    val intent = Intent(this, GelaFitWorkspaceActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    startActivity(intent)
+                }
+            }, 100) // Delay mínimo de 100ms para resposta rápida
         } else if (kioskMode == true && !targetAppUnlocked) {
             // Quando modo_kiosk está ativo E não está desbloqueado, abre o app automaticamente
-            val targetPackage = preferenceManager.getTargetPackageName()
-            if (!targetPackage.isNullOrEmpty()) {
-                openConfiguredApp(targetPackage)
-            }
+            Handler(Looper.getMainLooper()).postDelayed({
+                val targetPackage = preferenceManager.getTargetPackageName()
+                if (!targetPackage.isNullOrEmpty()) {
+                    openConfiguredApp(targetPackage)
+                }
+            }, 100) // Delay mínimo para resposta rápida
         } else {
             // Se está desbloqueado, permite minimizar normalmente
             Log.d(TAG, "🔓 Pausa permitida (desbloqueado)")
@@ -1247,19 +1303,28 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         
-        // Se is_active ou modo_kiosk está ativo, impede saída da activity
-        if (isActive == true || kioskMode == true) {
+        // Verifica se está desbloqueado (usa cache local para resposta imediata)
+        val gelafitUnlocked = preferenceManager.isGelaFitUnlocked()
+        val targetAppUnlocked = preferenceManager.isTargetAppUnlocked()
+        
+        // Se is_active ou modo_kiosk está ativo E não está desbloqueado, impede saída da activity
+        if ((isActive == true && !gelafitUnlocked) || (kioskMode == true && !targetAppUnlocked)) {
             Log.d(TAG, "🔒 Tentativa de sair bloqueada")
-            if (kioskMode == true) {
-                // Quando modo_kiosk está ativo, abre o app
-                val targetPackage = preferenceManager.getTargetPackageName()
-                if (!targetPackage.isNullOrEmpty()) {
-                    openConfiguredApp(targetPackage)
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (kioskMode == true && !targetAppUnlocked) {
+                    // Quando modo_kiosk está ativo, abre o app
+                    val targetPackage = preferenceManager.getTargetPackageName()
+                    if (!targetPackage.isNullOrEmpty()) {
+                        openConfiguredApp(targetPackage)
+                    }
+                } else if (isActive == true && !gelafitUnlocked) {
+                    // Quando apenas is_active está ativo, apenas mostra o grid
+                    showAppsGrid()
+                    val intent = Intent(this, GelaFitWorkspaceActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    startActivity(intent)
                 }
-            } else {
-                // Quando apenas is_active está ativo, apenas mostra o grid
-                showAppsGrid()
-            }
+            }, 100) // Delay mínimo para resposta rápida
         }
     }
     
