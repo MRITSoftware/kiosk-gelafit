@@ -77,13 +77,13 @@ class AppSelectionActivity : AppCompatActivity() {
      */
     private fun showDeviceRegistrationDialog() {
         val input = EditText(this)
-        input.hint = "Email da unidade (ex: sala01@empresa.com)"
+        input.hint = "Email da unidade (ex: gelafit@gelafit.com)"
         input.inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         
         AlertDialog.Builder(this)
             .setTitle("Registro do Dispositivo")
             .setMessage(
-                "Bem-vindo ao MRIT Control!\n\n" +
+                "Bem-vindo ao GelaFit Control!\n\n" +
                 "Para registrar este dispositivo, informe o email da unidade:"
             )
             .setView(input)
