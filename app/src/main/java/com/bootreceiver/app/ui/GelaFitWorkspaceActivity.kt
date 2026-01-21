@@ -116,12 +116,8 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         // Configura menu de 3 pontinhos
         setupMenuButton()
 
-        // Configura gesto de desbloqueio (verifica se já está configurado, senão configura)
-        if (!preferenceManager.isUnlockHotspotConfigured()) {
-            showUnlockHotspotSetupDialog()
-        } else {
-            setupUnlockHotspot()
-        }
+        // Configura círculo de desbloqueio (sempre visível no centro da tela)
+        setupUnlockCircle()
         
         // Mostra o grid por padrão (será ajustado conforme is_active)
         appsGridRecyclerView.visibility = View.VISIBLE
@@ -244,201 +240,76 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     }
 
     /**
-     * Mostra diálogo para configurar área de desbloqueio na primeira vez
+     * Configura o círculo de desbloqueio visível no centro da tela
      */
-    private fun showUnlockHotspotSetupDialog() {
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Configurar Área de Desbloqueio")
-            .setMessage("Toque e segure por 5 segundos em QUALQUER CANTO da tela onde você quer configurar a área de desbloqueio.\n\nOs 4 cantos estão disponíveis:\n• Superior Esquerdo\n• Superior Direito\n• Inferior Esquerdo\n• Inferior Direito")
-            .setPositiveButton("Entendi, vou tocar na tela", null)
-            .setCancelable(false)
-            .create()
+    private fun setupUnlockCircle() {
+        val unlockCircle = findViewById<View>(R.id.unlockCircle)
+        unlockHandler = Handler(Looper.getMainLooper())
         
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                dialog.dismiss()
-                startUnlockHotspotSelection()
-            }
-        }
-        
-        dialog.show()
-    }
-    
-    private var hotspotSelectionHandler: Handler? = null
-    private var hotspotSelectionRunnable: Runnable? = null
-    
-    /**
-     * Inicia a seleção da área de desbloqueio tocando diretamente na tela
-     */
-    private fun startUnlockHotspotSelection() {
-        // Mostra instrução visual
-        val instructionDialog = AlertDialog.Builder(this)
-            .setTitle("Configurando Área de Desbloqueio")
-            .setMessage("Toque e segure por 5 segundos em QUALQUER CANTO da tela onde você quer configurar a área de desbloqueio.")
-            .setCancelable(false)
-            .create()
-        
-        instructionDialog.show()
-        
-        // Configura listener para toda a tela
-        val rootView = findViewById<ViewGroup>(android.R.id.content)
-        var touchStartTime = 0L
-        var touchX = 0f
-        var touchY = 0f
-        
-        val touchListener = View.OnTouchListener { _, event ->
+        // Configura listener para toque e segurar por 5 segundos
+        unlockCircle.setOnTouchListener { view, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    touchStartTime = System.currentTimeMillis()
-                    touchX = event.x
-                    touchY = event.y
-                    
-                    // Inicia contagem regressiva visual
-                    hotspotSelectionHandler = Handler(Looper.getMainLooper())
-                    var countdown = 5
-                    hotspotSelectionRunnable = object : Runnable {
-                        override fun run() {
-                            val elapsed = (System.currentTimeMillis() - touchStartTime) / 1000
-                            if (elapsed >= 5) {
-                                // Completo! Determina qual canto foi tocado
-                                val screenWidth = resources.displayMetrics.widthPixels
-                                val screenHeight = resources.displayMetrics.heightPixels
-                                val centerX = screenWidth / 2
-                                val centerY = screenHeight / 2
-                                
-                                val position = when {
-                                    touchX < centerX && touchY < centerY -> "top_left"
-                                    touchX >= centerX && touchY < centerY -> "top_right"
-                                    touchX < centerX && touchY >= centerY -> "bottom_left"
-                                    else -> "bottom_right"
-                                }
-                                
-                                val positionNames = mapOf(
-                                    "top_left" to "Canto Superior Esquerdo",
-                                    "top_right" to "Canto Superior Direito",
-                                    "bottom_left" to "Canto Inferior Esquerdo",
-                                    "bottom_right" to "Canto Inferior Direito"
-                                )
-                                
-                                // Salva a posição
-                                preferenceManager.saveUnlockHotspotPosition(position)
-                                setupUnlockHotspot()
-                                
-                                // Remove listener
-                                rootView.setOnTouchListener(null)
-                                instructionDialog.dismiss()
-                                
-                                // Mostra confirmação
-                                AlertDialog.Builder(this@GelaFitWorkspaceActivity)
-                                    .setTitle("Área Configurada!")
-                                    .setMessage("Área configurada: ${positionNames[position]}\n\nAgora você pode tocar e segurar por 5 segundos nessa área para desbloquear.")
-                                    .setPositiveButton("OK", null)
-                                    .show()
-                                
-                                vibrateShort()
-                            } else {
-                                hotspotSelectionHandler?.postDelayed(this, 100)
-                            }
-                        }
-                    }
-                    hotspotSelectionHandler?.post(hotspotSelectionRunnable!!)
+                    // Inicia contagem de 5 segundos
+                    unlockHandler?.postDelayed(unlockRunnable, UNLOCK_HOLD_MS)
+                    // Feedback visual - muda opacidade do círculo enquanto segura
+                    view.alpha = 0.6f
+                    // Adiciona animação de pulsação
+                    view.animate()
+                        .scaleX(1.2f)
+                        .scaleY(1.2f)
+                        .setDuration(500)
+                        .start()
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     // Cancela se soltar antes de 5 segundos
-                    hotspotSelectionHandler?.removeCallbacks(hotspotSelectionRunnable!!)
-                    rootView.setOnTouchListener(null)
-                    instructionDialog.dismiss()
-                    Toast.makeText(this@GelaFitWorkspaceActivity, "Segure por 5 segundos completos", Toast.LENGTH_SHORT).show()
+                    unlockHandler?.removeCallbacks(unlockRunnable)
+                    // Restaura opacidade e tamanho
+                    view.alpha = 1.0f
+                    view.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .setDuration(200)
+                        .start()
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    // Se mover muito, cancela
+                    unlockHandler?.removeCallbacks(unlockRunnable)
+                    view.alpha = 1.0f
+                    view.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .setDuration(200)
+                        .start()
                     true
                 }
                 else -> false
             }
         }
         
-        rootView.setOnTouchListener(touchListener)
+        // Atualiza visibilidade do círculo conforme o estado
+        updateUnlockCircleVisibility()
     }
     
     /**
-     * Configura a área de desbloqueio por long press (5s - posição configurável)
+     * Atualiza a visibilidade do círculo de desbloqueio
+     * Mostra apenas quando is_active ou kiosk_mode estão ativos
      */
-    private fun setupUnlockHotspot() {
-        val hotspot = findViewById<View>(R.id.unlockHotspot)
-        unlockHandler = Handler(Looper.getMainLooper())
-        
-        // Aplica posição configurada
-        val position = preferenceManager.getUnlockHotspotPosition()
-        val layoutParams = hotspot.layoutParams as RelativeLayout.LayoutParams
-        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_TOP)
-        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_START)
-        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_END)
-        
-        when (position) {
-            "top_left" -> {
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_START)
-                layoutParams.setMargins(16, 16, 0, 0)
+    private fun updateUnlockCircleVisibility() {
+        runOnUiThread {
+            val unlockCircle = findViewById<View>(R.id.unlockCircle)
+            // Mostra o círculo apenas quando há algo bloqueado para desbloquear
+            if ((isActive == true && !preferenceManager.isGelaFitUnlocked()) || 
+                (kioskMode == true && !preferenceManager.isTargetAppUnlocked())) {
+                unlockCircle.visibility = View.VISIBLE
+            } else {
+                unlockCircle.visibility = View.GONE
             }
-            "top_right" -> {
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_END)
-                layoutParams.setMargins(0, 16, 16, 0)
-            }
-            "bottom_left" -> {
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_START)
-                layoutParams.setMargins(16, 0, 0, 16)
-            }
-            "bottom_right" -> {
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_END)
-                layoutParams.setMargins(0, 0, 16, 16)
-            }
-            else -> {
-                // Default: bottom_right
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
-                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_END)
-                layoutParams.setMargins(0, 0, 16, 16)
-            }
-        }
-        hotspot.layoutParams = layoutParams
-        
-        hotspot.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    unlockHandler?.postDelayed(unlockRunnable, UNLOCK_HOLD_MS)
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_MOVE -> {
-                    unlockHandler?.removeCallbacks(unlockRunnable)
-                }
-            }
-            true
         }
     }
     
-    /**
-     * Configura a posição da área de desbloqueio
-     */
-    private fun configureUnlockHotspot() {
-        val positions = arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")
-        val positionValues = arrayOf("top_left", "top_right", "bottom_left", "bottom_right")
-        
-        val currentPosition = preferenceManager.getUnlockHotspotPosition()
-        val currentIndex = positionValues.indexOf(currentPosition).takeIf { it >= 0 } ?: 3
-        
-        AlertDialog.Builder(this)
-            .setTitle("Configurar Área de Desbloqueio")
-            .setMessage("Escolha onde tocar e segurar por 5 segundos para desbloquear:")
-            .setSingleChoiceItems(positions, currentIndex) { dialog, which ->
-                preferenceManager.saveUnlockHotspotPosition(positionValues[which])
-                setupUnlockHotspot() // Reconfigura o hotspot
-                dialog.dismiss()
-                Toast.makeText(this, "Área de desbloqueio configurada: ${positions[which]}", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
 
     /**
      * Desbloqueio individual - permite escolher o que desbloquear
@@ -511,6 +382,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     vibrateShort()
                     updateKioskButtonVisibility(false, kioskMode == true)
                     showFixGelaFitButton()
+                    updateUnlockCircleVisibility()
                     Toast.makeText(this@GelaFitWorkspaceActivity, "GelaFit Control desbloqueado - você pode minimizar", Toast.LENGTH_LONG).show()
                 }
                 
@@ -545,6 +417,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 runOnUiThread {
                     vibrateShort()
                     updateKioskButtonVisibility(isActive == true, false)
+                    updateUnlockCircleVisibility()
                     Toast.makeText(this@GelaFitWorkspaceActivity, "App escolhido desbloqueado - você pode minimizar", Toast.LENGTH_LONG).show()
                 }
                 
@@ -587,6 +460,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     vibrateShort()
                     updateKioskButtonVisibility(false, false)
                     showFixGelaFitButton()
+                    updateUnlockCircleVisibility()
                     Toast.makeText(this@GelaFitWorkspaceActivity, "Tudo desbloqueado", Toast.LENGTH_LONG).show()
                 }
                 
@@ -695,10 +569,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     addProductToGrid()
                     true
                 }
-                R.id.menu_configure_unlock -> {
-                    configureUnlockHotspot()
-                    true
-                }
+                // Removido: configuração de desbloqueio não é mais necessária (círculo fixo no centro)
                 else -> false
             }
         }
@@ -880,9 +751,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                         Log.d(TAG, "Sincronizado status com Supabase (loop)")
                     }
                     
-                    // Atualiza visibilidade dos botões
+                    // Atualiza visibilidade dos botões e círculo
                     updateKioskButtonVisibility(currentIsActive == true, currentKioskMode == true)
                     showFixGelaFitButton()
+                    updateUnlockCircleVisibility()
                     
                     // Se mudou o status, aplica as mudanças
                     if (isActive != currentIsActive || kioskMode != currentKioskMode) {
@@ -949,9 +821,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Aplica configurações iniciais baseadas no status atual
      */
     private fun applyInitialSettings() {
-        // Atualiza visibilidade dos botões
+        // Atualiza visibilidade dos botões e círculo
         updateKioskButtonVisibility(isActive == true, kioskMode == true)
         showFixGelaFitButton()
+        updateUnlockCircleVisibility()
         
         if (isActive == true) {
             applyAppBlocking()
