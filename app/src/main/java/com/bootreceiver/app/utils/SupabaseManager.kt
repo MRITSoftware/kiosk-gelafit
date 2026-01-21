@@ -9,8 +9,7 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.realtime
-import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.onPostgresChange
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -540,28 +539,20 @@ class SupabaseManager {
             // Cria canal Realtime para escutar mudanças na tabela devices
             val channel = client.realtime.channel("device-changes-$deviceId")
             
-            // Escuta mudanças na tabela devices usando postgresChangeFlow
-            val changesFlow = channel.postgresChangeFlow<PostgresAction.UPDATE>(
+            // Cria um scope para processar mudanças
+            val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+            
+            // Escuta mudanças na tabela devices usando onPostgresChange
+            channel.onPostgresChange(
                 schema = "public",
-                table = "devices"
-            ) {
-                filter("device_id", "eq", deviceId)
-            }
-            
-            // Inscreve no canal
-            channel.subscribe()
-            Log.d(TAG, "✅ Subscription Realtime ativa para dispositivo: $deviceId")
-            
-            // Cria um scope para coletar mudanças
-            val collectScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-            
-            // Coleta mudanças do Flow em uma coroutine separada
-            val collectJob = collectScope.launch {
-                changesFlow.collect { change ->
-                    try {
-                        Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela devices")
-                        
-                        // Busca o status atualizado após a mudança
+                table = "devices",
+                filter = "device_id=eq.$deviceId"
+            ) { change ->
+                try {
+                    Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela devices")
+                    
+                    // Busca o status atualizado após a mudança
+                    processScope.launch {
                         val status = withContext(Dispatchers.IO) {
                             getDeviceStatus(deviceId)
                         }
@@ -574,17 +565,20 @@ class SupabaseManager {
                             trySend(newStatus)
                             lastStatus = newStatus
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "❌ Erro ao processar mudança Realtime: ${e.message}", e)
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Erro ao processar mudança Realtime: ${e.message}", e)
                 }
             }
+            
+            // Inscreve no canal
+            channel.subscribe()
+            Log.d(TAG, "✅ Subscription Realtime ativa para dispositivo: $deviceId")
             
             // Aguarda até que o Flow seja cancelado
             awaitClose {
                 Log.d(TAG, "🔌 Fechando subscription Realtime para dispositivo: $deviceId")
-                collectJob.cancel()
-                collectScope.cancel()
+                processScope.cancel()
                 channel.unsubscribe()
             }
         }
@@ -633,28 +627,20 @@ class SupabaseManager {
             // Cria canal Realtime para escutar mudanças na tabela device_commands
             val channel = client.realtime.channel("restart-commands-$deviceId")
             
-            // Escuta INSERT na tabela device_commands usando postgresChangeFlow
-            val changesFlow = channel.postgresChangeFlow<PostgresAction.INSERT>(
+            // Cria um scope para processar mudanças
+            val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+            
+            // Escuta INSERT na tabela device_commands usando onPostgresChange
+            channel.onPostgresChange(
                 schema = "public",
-                table = "device_commands"
-            ) {
-                filter("device_id", "eq", deviceId)
-            }
-            
-            // Inscreve no canal
-            channel.subscribe()
-            Log.d(TAG, "✅ Subscription Realtime ativa para comandos do dispositivo: $deviceId")
-            
-            // Cria um scope para coletar mudanças
-            val collectScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-            
-            // Coleta mudanças do Flow em uma coroutine separada
-            val collectJob = collectScope.launch {
-                changesFlow.collect { change ->
-                    try {
-                        Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela device_commands")
-                        
-                        // Busca o comando mais recente
+                table = "device_commands",
+                filter = "device_id=eq.$deviceId"
+            ) { change ->
+                try {
+                    Log.d(TAG, "🔄 Realtime: Mudança detectada na tabela device_commands")
+                    
+                    // Busca o comando mais recente
+                    processScope.launch {
                         val command = withContext(Dispatchers.IO) {
                             getRestartAppCommand(deviceId)
                         }
@@ -665,17 +651,20 @@ class SupabaseManager {
                             trySend(command)
                             lastCommandId = command.id
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "❌ Erro ao processar comando Realtime: ${e.message}", e)
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Erro ao processar comando Realtime: ${e.message}", e)
                 }
             }
+            
+            // Inscreve no canal
+            channel.subscribe()
+            Log.d(TAG, "✅ Subscription Realtime ativa para comandos do dispositivo: $deviceId")
             
             // Aguarda até que o Flow seja cancelado
             awaitClose {
                 Log.d(TAG, "🔌 Fechando subscription Realtime para comandos do dispositivo: $deviceId")
-                collectJob.cancel()
-                collectScope.cancel()
+                processScope.cancel()
                 channel.unsubscribe()
             }
         }
