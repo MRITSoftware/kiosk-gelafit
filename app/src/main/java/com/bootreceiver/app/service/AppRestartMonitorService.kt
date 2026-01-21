@@ -17,15 +17,10 @@ import com.bootreceiver.app.utils.DeviceIdManager
 import com.bootreceiver.app.utils.PreferenceManager
 import com.bootreceiver.app.utils.SupabaseManager
 import com.bootreceiver.app.utils.DeviceCommand
-import io.github.jan.supabase.realtime.PostgresAction
-import io.github.jan.supabase.realtime.channel
-import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -141,65 +136,26 @@ class AppRestartMonitorService : Service() {
     }
     
     /**
-     * Inicia o monitoramento usando Realtime (elimina polling)
+     * Inicia o monitoramento com polling otimizado (5 minutos)
+     * Realtime será implementado em versão futura após validação da API
      */
     private suspend fun startMonitoring() {
-        try {
-            Log.d(TAG, "🔌 Conectando ao Realtime para device_commands...")
-            
-            // Cria canal Realtime para device_commands filtrado por device_id
-            val channel = supabaseManager.client.realtime.channel("device_commands_$deviceId")
-            channel.subscribe()
-            Log.d(TAG, "✅ Realtime conectado! Monitorando comandos em tempo real...")
-
-            val changes = channel.postgresChangeFlow<DeviceCommand>(
-                schema = "public",
-                table = "device_commands",
-                filter = { eq("device_id", deviceId) }
-            )
-
-            changes.collect { action ->
-                try {
-                    when (action) {
-                        is PostgresAction.Insert -> {
-                            val command = action.record
-                            if (command.command == "restart_app" && !command.executed) {
-                                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                                Log.d(TAG, "⚠️⚠️⚠️ NOVO COMANDO DE REINICIAR APP RECEBIDO VIA REALTIME! ⚠️⚠️⚠️")
-                                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                                serviceScope.launch {
-                                    processRestartCommand(command)
-                                }
-                            }
-                        }
-                        else -> { /* ignore */ }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Erro ao processar mudança Realtime: ${e.message}", e)
-                }
-            }
-            
-            // Fallback: verifica uma vez a cada 5 minutos se há comandos pendentes (caso Realtime falhe)
-            while (isRunning) {
-                delay(5 * 60 * 1000L) // 5 minutos
-                
+        Log.d(TAG, "🔄 Iniciando monitoramento com polling otimizado (5 minutos)")
+        
+        while (isRunning) {
+            try {
                 if (!isRestarting) {
-                    try {
-                        val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
-                        if (commandInfo != null && commandInfo.id != null && 
-                            !processedCommandIds.contains(commandInfo.id!!)) {
-                            Log.d(TAG, "🔄 Fallback: Comando pendente encontrado via polling")
-                            processRestartCommand(commandInfo)
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Erro no fallback polling: ${e.message}", e)
+                    val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
+                    if (commandInfo != null) {
+                        processRestartCommand(commandInfo)
                     }
                 }
+                // Verifica a cada 5 minutos (economiza requisições)
+                delay(5 * 60 * 1000L)
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro no monitoramento: ${e.message}", e)
+                delay(ERROR_RETRY_DELAY_MS)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Erro ao conectar Realtime, usando polling como fallback: ${e.message}", e)
-            // Fallback para polling se Realtime falhar
-            startPollingFallback()
         }
     }
     
@@ -274,26 +230,6 @@ class AppRestartMonitorService : Service() {
         isRestarting = false
     }
     
-    /**
-     * Fallback: polling caso Realtime falhe
-     */
-    private suspend fun startPollingFallback() {
-        Log.d(TAG, "🔄 Usando polling como fallback (Realtime não disponível)")
-        while (isRunning) {
-            try {
-                if (!isRestarting) {
-                    val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
-                    if (commandInfo != null) {
-                        processRestartCommand(commandInfo)
-                    }
-                }
-                delay(CHECK_INTERVAL_MS)
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro no polling fallback: ${e.message}", e)
-                delay(ERROR_RETRY_DELAY_MS)
-            }
-        }
-    }
     
     override fun onDestroy() {
         super.onDestroy()
@@ -335,7 +271,7 @@ class AppRestartMonitorService : Service() {
         private const val TAG = "AppRestartMonitor"
         private const val CHANNEL_ID = "app_restart_monitor_channel"
         private const val NOTIFICATION_ID = 1
-        private const val CHECK_INTERVAL_MS = 30000L // Verifica a cada 30 segundos
+        private const val CHECK_INTERVAL_MS = 5 * 60 * 1000L // Verifica a cada 5 minutos (economiza requisições)
         private const val ERROR_RETRY_DELAY_MS = 60000L // Em caso de erro, aguarda 1 minuto
     }
 }
