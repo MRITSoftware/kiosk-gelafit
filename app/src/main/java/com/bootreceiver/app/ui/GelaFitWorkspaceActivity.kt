@@ -175,22 +175,6 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         }
     }
     
-    /**
-     * Mostra/esconde botão de fixar GelaFit Kiosk
-     */
-    private fun showFixGelaFitButton() {
-        runOnUiThread {
-            val fixGelaFitButton = findViewById<Button>(R.id.fixGelaFitButton)
-            if (isActive == false) {
-                fixGelaFitButton.visibility = View.VISIBLE
-                fixGelaFitButton.setOnClickListener {
-                    fixGelaFitKiosk()
-                }
-            } else {
-                fixGelaFitButton.visibility = View.GONE
-            }
-        }
-    }
     
     /**
      * Fixa o GelaFit Control em modo kiosk (seta is_active = true)
@@ -381,7 +365,6 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 runOnUiThread {
                     vibrateShort()
                     updateKioskButtonVisibility(false, kioskMode == true)
-                    showFixGelaFitButton()
                     updateUnlockCircleVisibility()
                     Toast.makeText(this@GelaFitWorkspaceActivity, "GelaFit Control desbloqueado - você pode minimizar", Toast.LENGTH_LONG).show()
                 }
@@ -459,7 +442,6 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 runOnUiThread {
                     vibrateShort()
                     updateKioskButtonVisibility(false, false)
-                    showFixGelaFitButton()
                     updateUnlockCircleVisibility()
                     Toast.makeText(this@GelaFitWorkspaceActivity, "Tudo desbloqueado", Toast.LENGTH_LONG).show()
                 }
@@ -581,7 +563,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Verifica configurações necessárias
      */
     private fun checkSettings() {
+        // Permite abrir mesmo com kiosk ativo (para testes)
         val intent = Intent(this, SettingsCheckActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         startActivity(intent)
     }
     
@@ -589,7 +573,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
      * Adiciona produto ao grid
      */
     private fun addProductToGrid() {
+        // Permite abrir mesmo com kiosk ativo (para testes)
         val intent = Intent(this, AddProductActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         startActivity(intent)
     }
     
@@ -694,80 +680,55 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         
         isMonitoring = true
         serviceScope.launch {
-            // Verifica status inicial imediatamente
+            // Verifica status inicial DIRETAMENTE do banco (sem cache durante testes)
             try {
-                // Usa cache primeiro para resposta IMEDIATA (sem esperar banco)
+                // Busca DIRETAMENTE do banco (conexão direta)
+                val status = withContext(Dispatchers.IO) {
+                    supabaseManager.getDeviceStatus(deviceId)
+                }
+                
+                val freshIsActive = status?.isActive
+                val freshKiosk = status?.kioskMode
+                Log.d(TAG, "Status inicial (DIRETO DO BANCO) - is_active: $freshIsActive, modo_kiosk: $freshKiosk")
+
+                if (freshIsActive != null) {
+                    isActive = freshIsActive
+                    preferenceManager.saveIsActiveCached(freshIsActive)
+                }
+                if (freshKiosk != null) {
+                    kioskMode = freshKiosk
+                    preferenceManager.saveKioskModeCached(freshKiosk)
+                }
+                preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                
+                // Aplica configurações após buscar do banco
+                applyInitialSettings()
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao verificar status inicial: ${e.message}", e)
+                // Em caso de erro, usa cache como fallback
                 val cachedIsActive = preferenceManager.getIsActiveCached()
                 val cachedKioskMode = preferenceManager.getKioskModeCached()
                 isActive = cachedIsActive
                 kioskMode = cachedKioskMode
-                
-                // Aplica configurações IMEDIATAMENTE usando cache (resposta instantânea)
                 applyInitialSettings()
-
-                // Sincroniza com Supabase em background (não bloqueia a UI)
-                val now = System.currentTimeMillis()
-                val lastSync = preferenceManager.getStatusLastSync()
-                val needsSync = lastSync == 0L || (now - lastSync > STATUS_SYNC_INTERVAL_MS)
-
-                if (needsSync) {
-                    // Sincroniza em background sem bloquear
-                    launch(Dispatchers.IO) {
-                        try {
-                            val status = supabaseManager.getDeviceStatus(deviceId)
-                            val freshIsActive = status?.isActive
-                            val freshKiosk = status?.kioskMode
-                            Log.d(TAG, "Status inicial (sync background) - is_active: $freshIsActive, modo_kiosk: $freshKiosk")
-
-                            if (freshIsActive != null && freshIsActive != isActive) {
-                                isActive = freshIsActive
-                                preferenceManager.saveIsActiveCached(freshIsActive)
-                                withContext(Dispatchers.Main) {
-                                    applyInitialSettings()
-                                }
-                            }
-                            if (freshKiosk != null && freshKiosk != kioskMode) {
-                                kioskMode = freshKiosk
-                                preferenceManager.saveKioskModeCached(freshKiosk)
-                                withContext(Dispatchers.Main) {
-                                    applyInitialSettings()
-                                }
-                            }
-                            preferenceManager.saveStatusLastSync(now)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Erro ao sincronizar status inicial: ${e.message}", e)
-                        }
-                    }
-                } else {
-                    Log.d(TAG, "Usando cache recente (menos de 15 min); último sync: ${lastSync}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao verificar status inicial: ${e.message}", e)
             }
             
             // Loop de monitoramento contínuo
             while (isMonitoring) {
                 try {
-                    // Usa cache e sincroniza apenas se passar do intervalo
-                    val nowLoop = System.currentTimeMillis()
-                    val lastSyncLoop = preferenceManager.getStatusLastSync()
-                    var currentIsActive = preferenceManager.getIsActiveCached()
-                    var currentKioskMode = preferenceManager.getKioskModeCached()
-
-                    val shouldSync = nowLoop - lastSyncLoop > STATUS_SYNC_INTERVAL_MS
-                    if (shouldSync) {
-                        val status = supabaseManager.getDeviceStatus(deviceId)
-                        currentIsActive = status?.isActive ?: currentIsActive
-                        currentKioskMode = status?.kioskMode ?: currentKioskMode
-                        preferenceManager.saveIsActiveCached(currentIsActive)
-                        preferenceManager.saveKioskModeCached(currentKioskMode)
-                        preferenceManager.saveStatusLastSync(nowLoop)
-                        Log.d(TAG, "Sincronizado status com Supabase (loop)")
-                    }
+                    // Busca DIRETAMENTE do banco a cada loop (conexão direta durante testes)
+                    val status = supabaseManager.getDeviceStatus(deviceId)
+                    val currentIsActive = status?.isActive ?: preferenceManager.getIsActiveCached()
+                    val currentKioskMode = status?.kioskMode ?: preferenceManager.getKioskModeCached()
+                    
+                    // Atualiza cache
+                    preferenceManager.saveIsActiveCached(currentIsActive)
+                    preferenceManager.saveKioskModeCached(currentKioskMode)
+                    preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                    Log.d(TAG, "Status atualizado do banco (loop) - is_active: $currentIsActive, modo_kiosk: $currentKioskMode")
                     
                     // Atualiza visibilidade dos botões e círculo
                     updateKioskButtonVisibility(currentIsActive == true, currentKioskMode == true)
-                    showFixGelaFitButton()
                     updateUnlockCircleVisibility()
                     
                     // Se mudou o status, aplica as mudanças
@@ -837,7 +798,6 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     private fun applyInitialSettings() {
         // Atualiza visibilidade dos botões e círculo
         updateKioskButtonVisibility(isActive == true, kioskMode == true)
-        showFixGelaFitButton()
         updateUnlockCircleVisibility()
         
         if (isActive == true) {
