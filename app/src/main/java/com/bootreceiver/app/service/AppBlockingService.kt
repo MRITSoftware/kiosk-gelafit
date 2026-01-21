@@ -43,6 +43,13 @@ class AppBlockingService : Service() {
         "com.android.systemui"    // System UI (necessário para funcionamento do sistema)
     )
     
+    // Activities permitidas mesmo com kiosk ativo
+    private val allowedActivities = setOf(
+        "com.bootreceiver.app.ui.SettingsCheckActivity",
+        "com.bootreceiver.app.ui.AddProductActivity",
+        "com.bootreceiver.app.ui.GelaFitWorkspaceActivity"
+    )
+    
     override fun onBind(intent: Intent?): IBinder? = null
     
     override fun onCreate() {
@@ -161,11 +168,21 @@ class AppBlockingService : Service() {
                 }
                 
                 // Verifica qual app está em foreground
-                val foregroundPackage = getForegroundPackage()
+                val foregroundInfo = getForegroundInfo()
                 
-                if (foregroundPackage != null) {
+                if (foregroundInfo != null) {
+                    val foregroundPackage = foregroundInfo.packageName
+                    val foregroundActivity = foregroundInfo.activityName
+                    
+                    // Permite activities específicas do GelaFit Control mesmo com kiosk ativo
+                    val isAllowedActivity = foregroundActivity != null && allowedActivities.any { 
+                        foregroundActivity.contains(it.substringAfterLast("."))
+                    }
+                    
                     // Se não é o app configurado nem um app permitido, bloqueia
-                    if (foregroundPackage != targetPackage && !allowedPackages.contains(foregroundPackage)) {
+                    if (foregroundPackage != targetPackage && 
+                        !allowedPackages.contains(foregroundPackage) && 
+                        !isAllowedActivity) {
                         Log.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         Log.w(TAG, "🚫 APP NÃO AUTORIZADO DETECTADO: $foregroundPackage")
                         Log.w(TAG, "🔄 Fechando app não autorizado e mostrando tela do control...")
@@ -177,6 +194,8 @@ class AppBlockingService : Service() {
                         // Aguarda um pouco e abre a tela do control (não o app diretamente)
                         delay(500)
                         openControlScreen()
+                    } else if (isAllowedActivity) {
+                        Log.d(TAG, "✅ Activity permitida detectada: $foregroundActivity")
                     }
                 }
                 
@@ -192,9 +211,17 @@ class AppBlockingService : Service() {
     }
     
     /**
-     * Obtém o package name do app que está em foreground
+     * Informação do app em foreground
      */
-    private fun getForegroundPackage(): String? {
+    data class ForegroundInfo(
+        val packageName: String,
+        val activityName: String?
+    )
+    
+    /**
+     * Obtém informações do app que está em foreground
+     */
+    private fun getForegroundInfo(): ForegroundInfo? {
         try {
             val activityManager = getSystemService(ActivityManager::class.java)
             
@@ -204,7 +231,10 @@ class AppBlockingService : Service() {
                     val topTask = runningTasks[0]
                     val taskInfo = topTask.taskInfo
                     if (taskInfo != null && taskInfo.topActivity != null) {
-                        return taskInfo.topActivity!!.packageName
+                        return ForegroundInfo(
+                            packageName = taskInfo.topActivity!!.packageName,
+                            activityName = taskInfo.topActivity!!.className
+                        )
                     }
                 }
             } else {
@@ -213,7 +243,10 @@ class AppBlockingService : Service() {
                 if (runningTasks.isNotEmpty()) {
                     val topActivity = runningTasks[0].topActivity
                     if (topActivity != null) {
-                        return topActivity.packageName
+                        return ForegroundInfo(
+                            packageName = topActivity.packageName,
+                            activityName = topActivity.className
+                        )
                     }
                 }
             }

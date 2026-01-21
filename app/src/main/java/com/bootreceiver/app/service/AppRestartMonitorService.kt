@@ -16,10 +16,15 @@ import com.bootreceiver.app.utils.AppLauncher
 import com.bootreceiver.app.utils.DeviceIdManager
 import com.bootreceiver.app.utils.PreferenceManager
 import com.bootreceiver.app.utils.SupabaseManager
+import com.bootreceiver.app.utils.DeviceCommand
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChanges
+import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -135,131 +140,165 @@ class AppRestartMonitorService : Service() {
     }
     
     /**
-     * Inicia o monitoramento periódico do banco de dados
+     * Inicia o monitoramento usando Realtime (elimina polling)
      */
     private suspend fun startMonitoring() {
+        try {
+            Log.d(TAG, "🔌 Conectando ao Realtime para device_commands...")
+            
+            // Cria canal Realtime para device_commands filtrado por device_id
+            val channel = supabaseManager.client.realtime.channel("device_commands_$deviceId")
+            
+            // Inscreve em mudanças na tabela device_commands
+            val subscription = channel.postgresChanges<DeviceCommand>(
+                schema = "public",
+                table = "device_commands",
+                filter = "device_id=eq.$deviceId"
+            ) {
+                select = "*"
+            }.collect { change ->
+                try {
+                    when (change) {
+                        is io.github.jan.supabase.realtime.PostgresChange.Insert -> {
+                            val command = change.newRecord
+                            if (command.command == "restart_app" && !command.executed) {
+                                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                                Log.d(TAG, "⚠️⚠️⚠️ NOVO COMANDO DE REINICIAR APP RECEBIDO VIA REALTIME! ⚠️⚠️⚠️")
+                                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                                
+                                // Processa o comando
+                                serviceScope.launch {
+                                    processRestartCommand(command)
+                                }
+                            }
+                        }
+                        is io.github.jan.supabase.realtime.PostgresChange.Update -> {
+                            // Ignora updates (comandos já executados)
+                        }
+                        else -> {
+                            // Ignora outros tipos de mudanças
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Erro ao processar mudança Realtime: ${e.message}", e)
+                }
+            }
+            
+            // Conecta ao canal
+            channel.subscribe()
+            Log.d(TAG, "✅ Realtime conectado! Monitorando comandos em tempo real...")
+            
+            // Fallback: verifica uma vez a cada 5 minutos se há comandos pendentes (caso Realtime falhe)
+            while (isRunning) {
+                delay(5 * 60 * 1000L) // 5 minutos
+                
+                if (!isRestarting) {
+                    try {
+                        val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
+                        if (commandInfo != null && commandInfo.id != null && 
+                            !processedCommandIds.contains(commandInfo.id!!)) {
+                            Log.d(TAG, "🔄 Fallback: Comando pendente encontrado via polling")
+                            processRestartCommand(commandInfo)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Erro no fallback polling: ${e.message}", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao conectar Realtime, usando polling como fallback: ${e.message}", e)
+            // Fallback para polling se Realtime falhar
+            startPollingFallback()
+        }
+    }
+    
+    /**
+     * Processa um comando de reiniciar app
+     */
+    private suspend fun processRestartCommand(command: DeviceCommand) {
+        if (isRestarting) {
+            Log.d(TAG, "⏳ Reinício já em andamento, ignorando comando...")
+            return
+        }
+        
+        val commandId = command.id
+        if (commandId != null && processedCommandIds.contains(commandId)) {
+            Log.d(TAG, "ℹ️ Comando já foi processado, ignorando...")
+            return
+        }
+        
+        isRestarting = true
+        
+        val preferenceManager = PreferenceManager(this@AppRestartMonitorService)
+        val targetPackageName = preferenceManager.getTargetPackageName()
+        
+        if (targetPackageName.isNullOrEmpty()) {
+            Log.w(TAG, "Nenhum app configurado. Não é possível reiniciar.")
+            supabaseManager.markCommandAsExecutedById(commandId)
+            if (commandId != null) processedCommandIds.add(commandId)
+            isRestarting = false
+            return
+        }
+        
+        Log.d(TAG, "App configurado: $targetPackageName")
+        
+        // Marca como executado ANTES de reiniciar
+        val marked = supabaseManager.markCommandAsExecutedById(commandId)
+        if (!marked) {
+            Log.e(TAG, "❌ Falha ao marcar comando como executado!")
+            val deleted = supabaseManager.deleteCommandById(commandId)
+            if (!deleted) {
+                Log.e(TAG, "❌ Também falhou ao deletar. Abortando.")
+                isRestarting = false
+                return
+            }
+        }
+        
+        if (commandId != null) processedCommandIds.add(commandId)
+        
+        // Reinicia o app
+        Log.d(TAG, "🔄 Reiniciando app: $targetPackageName")
+        val appLauncher = AppLauncher(this@AppRestartMonitorService)
+        
+        // Fecha o app primeiro
+        try {
+            val activityManager = getSystemService(android.app.ActivityManager::class.java)
+            activityManager.killBackgroundProcesses(targetPackageName)
+            Runtime.getRuntime().exec("am force-stop $targetPackageName").waitFor()
+            Log.d(TAG, "✅ App fechado")
+        } catch (e: Exception) {
+            Log.w(TAG, "Erro ao fechar app: ${e.message}")
+        }
+        
+        delay(1000)
+        
+        // Reabre o app
+        val success = appLauncher.launchApp(targetPackageName)
+        if (success) {
+            Log.d(TAG, "✅ App reiniciado com sucesso!")
+        } else {
+            Log.e(TAG, "❌ Falha ao reabrir app")
+        }
+        
+        isRestarting = false
+    }
+    
+    /**
+     * Fallback: polling caso Realtime falhe
+     */
+    private suspend fun startPollingFallback() {
+        Log.d(TAG, "🔄 Usando polling como fallback (Realtime não disponível)")
         while (isRunning) {
             try {
-                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                Log.d(TAG, "🔍 Ciclo de verificação #${System.currentTimeMillis() / CHECK_INTERVAL_MS}")
-                Log.d(TAG, "Device ID: $deviceId")
-                
-                // Verifica se já está reiniciando (evita múltiplos reinícios simultâneos)
-                if (isRestarting) {
-                    Log.d(TAG, "⏳ Reinício já em andamento, aguardando...")
-                    delay(CHECK_INTERVAL_MS)
-                    continue
-                }
-                
-                // Busca comando pendente (retorna o ID do comando se houver)
-                val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
-                
-                if (commandInfo != null) {
-                    val commandId = commandInfo.id
-                    
-                    // Verifica se este comando já foi processado nesta sessão
-                    if (commandId != null && processedCommandIds.contains(commandId)) {
-                        Log.d(TAG, "ℹ️ Comando já foi processado nesta sessão, ignorando...")
-                        delay(CHECK_INTERVAL_MS)
-                        continue
-                    }
-                    
-                    Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    Log.d(TAG, "⚠️⚠️⚠️ COMANDO DE REINICIAR APP ENCONTRADO! ⚠️⚠️⚠️")
-                    Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    
-                    // Marca que está reiniciando
-                    isRestarting = true
-                    
-                    // Obtém o app configurado
-                    val preferenceManager = PreferenceManager(this@AppRestartMonitorService)
-                    val targetPackageName = preferenceManager.getTargetPackageName()
-                    
-                    if (targetPackageName.isNullOrEmpty()) {
-                        Log.w(TAG, "Nenhum app configurado. Não é possível reiniciar.")
-                        // Marca como executado mesmo assim para não ficar em loop
-                        val marked = supabaseManager.markCommandAsExecutedById(commandId)
-                        if (marked) {
-                            Log.d(TAG, "✅ Comando marcado como executado (sem app configurado)")
-                            if (commandId != null) processedCommandIds.add(commandId)
-                        } else {
-                            Log.e(TAG, "❌ Falha ao marcar comando como executado!")
-                        }
-                        isRestarting = false
-                    } else {
-                        Log.d(TAG, "App configurado: $targetPackageName")
-                        
-                        // CRÍTICO: Marca como executado ANTES de reiniciar
-                        // Isso garante que mesmo se o app reiniciar, o comando já está marcado
-                        Log.d(TAG, "📝 Marcando comando como executado no Supabase...")
-                        val marked = supabaseManager.markCommandAsExecutedById(commandId)
-                        
-                        if (!marked) {
-                            Log.e(TAG, "❌ FALHA CRÍTICA: Não foi possível marcar comando como executado!")
-                            Log.e(TAG, "⚠️ Tentando deletar comando como alternativa...")
-                            // Tenta deletar como alternativa
-                            val deleted = supabaseManager.deleteCommandById(commandId)
-                            if (!deleted) {
-                                Log.e(TAG, "❌ Também falhou ao deletar comando. Abortando reinício.")
-                                delay(ERROR_RETRY_DELAY_MS)
-                                isRestarting = false
-                                continue
-                            } else {
-                                Log.d(TAG, "✅ Comando deletado como alternativa")
-                            }
-                        } else {
-                            Log.d(TAG, "✅ Comando marcado como executado com sucesso!")
-                        }
-                        
-                        // Adiciona à lista de comandos processados
-                        if (commandId != null) {
-                            processedCommandIds.add(commandId)
-                        }
-                        
-                        // Verifica novamente se o comando foi realmente processado (double-check)
-                        delay(2000) // Aguarda 2 segundos para garantir que foi salvo no banco
-                        val stillHasCommand = supabaseManager.getRestartAppCommand(deviceId)
-                        if (stillHasCommand != null && stillHasCommand.id == commandId) {
-                            Log.w(TAG, "⚠️ Comando ainda aparece como pendente após processar!")
-                            Log.w(TAG, "⚠️ Tentando deletar como fallback...")
-                            supabaseManager.deleteCommandById(commandId)
-                            delay(1000)
-                        }
-                        
-                        // Reinicia o app
-                        Log.d(TAG, "🔄 Reiniciando app: $targetPackageName")
-                        val appLauncher = AppLauncher(this@AppRestartMonitorService)
-                        val success = appLauncher.restartApp(targetPackageName)
-                        
-                        if (success) {
-                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                            Log.d(TAG, "✅✅✅ APP REINICIADO COM SUCESSO! ✅✅✅")
-                            Log.d(TAG, "✅ Comando foi executado e marcado como executado no banco")
-                            Log.d(TAG, "ℹ️ Não reiniciará novamente até que um NOVO comando seja criado")
-                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        } else {
-                            Log.e(TAG, "❌ Falha ao reiniciar app: $targetPackageName")
-                        }
-                        
-                        // Libera flag de reinício após um tempo
-                        delay(5000) // Aguarda 5 segundos antes de liberar
-                        isRestarting = false
-                    }
-                } else {
-                    Log.d(TAG, "ℹ️ Nenhum comando de reiniciar app pendente")
-                    // Se não há comando, reseta flag de reinício (caso tenha ficado travada)
-                    if (isRestarting) {
-                        Log.w(TAG, "⚠️ Flag de reinício estava travada, resetando...")
-                        isRestarting = false
+                if (!isRestarting) {
+                    val commandInfo = supabaseManager.getRestartAppCommand(deviceId)
+                    if (commandInfo != null) {
+                        processRestartCommand(commandInfo)
                     }
                 }
-                
-                // Aguarda antes da próxima verificação
                 delay(CHECK_INTERVAL_MS)
-                
             } catch (e: Exception) {
-                Log.e(TAG, "Erro no monitoramento: ${e.message}", e)
-                // Em caso de erro, aguarda um pouco antes de tentar novamente
+                Log.e(TAG, "Erro no polling fallback: ${e.message}", e)
                 delay(ERROR_RETRY_DELAY_MS)
             }
         }

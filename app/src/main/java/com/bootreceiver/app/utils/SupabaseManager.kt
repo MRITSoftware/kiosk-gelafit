@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
  */
 class SupabaseManager {
     
-    private val client: SupabaseClient = createSupabaseClient(
+    val client: SupabaseClient = createSupabaseClient(
         supabaseUrl = SUPABASE_URL,
         supabaseKey = SUPABASE_KEY
     ) {

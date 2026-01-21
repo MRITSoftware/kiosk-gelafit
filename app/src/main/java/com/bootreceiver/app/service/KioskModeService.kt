@@ -38,9 +38,11 @@ class KioskModeService : Service() {
     private var isRunning = false
     private val supabaseManager = SupabaseManager()
     private lateinit var deviceId: String
+    private lateinit var preferenceManager: PreferenceManager
     private var lastKioskMode: Boolean? = null
     private var lastIsActive: Boolean? = null
     private var lastWorkspaceLaunchMs: Long = 0
+    private val SYNC_INTERVAL_MS = 15 * 60 * 1000L // 15 minutos
     
     override fun onBind(intent: Intent?): IBinder? = null
     
@@ -48,6 +50,7 @@ class KioskModeService : Service() {
         super.onCreate()
         Log.d(TAG, "KioskModeService criado")
         deviceId = DeviceIdManager.getDeviceId(this)
+        preferenceManager = PreferenceManager(this)
         createNotificationChannel()
     }
     
@@ -130,11 +133,31 @@ class KioskModeService : Service() {
     private suspend fun startMonitoring() {
         while (isRunning) {
             try {
-                Log.d(TAG, "🔍 Verificando status de kiosk/is_active...")
-
-                val status = supabaseManager.getDeviceStatus(deviceId)
-                val isActive = status?.isActive ?: false
-                val kioskMode = status?.kioskMode ?: false
+                // Verifica se precisa sincronizar com o banco (a cada 15 minutos)
+                val lastSync = preferenceManager.getStatusLastSync()
+                val now = System.currentTimeMillis()
+                val needsSync = (now - lastSync) >= SYNC_INTERVAL_MS
+                
+                val isActive: Boolean
+                val kioskMode: Boolean
+                
+                if (needsSync) {
+                    Log.d(TAG, "🔄 Sincronizando status com Supabase (cache expirado)...")
+                    val status = supabaseManager.getDeviceStatus(deviceId)
+                    isActive = status?.isActive ?: false
+                    kioskMode = status?.kioskMode ?: false
+                    
+                    // Atualiza cache local
+                    preferenceManager.saveIsActiveCached(isActive)
+                    preferenceManager.saveKioskModeCached(kioskMode)
+                    preferenceManager.saveStatusLastSync(now)
+                    Log.d(TAG, "✅ Cache atualizado: is_active=$isActive, kiosk_mode=$kioskMode")
+                } else {
+                    // Usa cache local (mais rápido e economiza requisições)
+                    isActive = preferenceManager.getIsActiveCached()
+                    kioskMode = preferenceManager.getKioskModeCached()
+                    Log.d(TAG, "📦 Usando cache local: is_active=$isActive, kiosk_mode=$kioskMode")
+                }
 
                 val changed = (lastIsActive != isActive) || (lastKioskMode != kioskMode)
 
