@@ -47,6 +47,20 @@
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
+        <!-- Activity para verificar configurações -->
+        <activity
+            android:name=".ui.SettingsCheckActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BootReceiver"
+            android:parentActivityName=".ui.GelaFitWorkspaceActivity" />
+
+        <!-- Activity para adicionar produtos ao grid -->
+        <activity
+            android:name=".ui.AddProductActivity"
+            android:exported="false"
+            android:theme="@style/Theme.BootReceiver"
+            android:parentActivityName=".ui.GelaFitWorkspaceActivity" />
+
         <!-- BroadcastReceiver para escutar o boot -->
         <receiver
             android:name=".receiver.BootReceiver"

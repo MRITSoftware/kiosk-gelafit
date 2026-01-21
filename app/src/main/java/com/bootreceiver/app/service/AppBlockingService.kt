@@ -67,21 +67,23 @@ class AppBlockingService : Service() {
         
         isActive = newIsActive
         
+        // CRÍTICO: startForeground() DEVE ser chamado IMEDIATAMENTE quando iniciado como foreground service
+        // Isso evita o erro ForegroundServiceDidNotStartInTimeException
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                createNotificationChannel()
+                val notification = createNotification()
+                startForeground(NOTIFICATION_ID, notification)
+                Log.d(TAG, "✅ Foreground Service iniciado IMEDIATAMENTE")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Erro crítico ao iniciar Foreground Service: ${e.message}", e)
+            }
+        }
+        
         if (isActive && !isRunning) {
             try {
                 isRunning = true
                 Log.d(TAG, "AppBlockingService iniciado")
-                
-                createNotificationChannel()
-                
-                // Inicia como Foreground Service
-                try {
-                    val notification = createNotification()
-                    startForeground(NOTIFICATION_ID, notification)
-                    Log.d(TAG, "Foreground Service iniciado com sucesso")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Erro ao iniciar Foreground Service: ${e.message}", e)
-                }
                 
                 // Inicia o monitoramento
                 serviceScope.launch {
