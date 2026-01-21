@@ -303,12 +303,23 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                         }
                         
                         if (success) {
+                            // Atualiza cache local imediatamente
                             preferenceManager.saveKioskModeCached(true)
                             preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                            
+                            // Atualiza variáveis locais da Activity imediatamente
+                            kioskMode = true
+                            
+                            // Aplica as mudanças imediatamente
+                            enableKioskMode()
+                            updateKioskButtonVisibility(isActive == true, true)
+                            
                             val targetPackage = preferenceManager.getTargetPackageName()
                             if (!targetPackage.isNullOrEmpty()) {
                                 openConfiguredApp(targetPackage)
                             }
+                            
+                            Log.d(TAG, "✅ Modo kiosk ativado - banco atualizado, cache atualizado, variáveis locais atualizadas")
                         } else {
                             runOnUiThread {
                                 AlertDialog.Builder(this@GelaFitWorkspaceActivity)
@@ -477,10 +488,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 kioskMode = cachedKioskMode
                 applyInitialSettings()
 
-                // Sincroniza com Supabase se último sync passou de 15 minutos
+                // Sincroniza com Supabase se último sync passou de 15 minutos OU se nunca foi sincronizado (lastSync = 0)
                 val now = System.currentTimeMillis()
                 val lastSync = preferenceManager.getStatusLastSync()
-                val needsSync = now - lastSync > STATUS_SYNC_INTERVAL_MS
+                val needsSync = lastSync == 0L || (now - lastSync > STATUS_SYNC_INTERVAL_MS)
 
                 if (needsSync) {
                     val status = supabaseManager.getDeviceStatus(deviceId)
@@ -532,12 +543,14 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     if (isActive != currentIsActive || kioskMode != currentKioskMode) {
                         Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         if (currentIsActive == true) {
-                            Log.d(TAG, "🔒 IS_ACTIVE ATIVADO - Bloqueando acesso a outros apps")
+                            Log.d(TAG, "🔒 IS_ACTIVE ATIVADO - Bloqueando acesso a outros apps e mantendo GelaFit Control em modo kiosk")
                             applyAppBlocking()
+                            enableGelaFitKioskMode() // Mantém GelaFit Control em modo kiosk quando is_active = true
                             showAppsGrid()
                         } else {
                             Log.d(TAG, "🔓 IS_ACTIVE DESATIVADO - Liberando acesso")
                             removeAppBlocking()
+                            disableGelaFitKioskMode() // Remove modo kiosk do GelaFit Control quando is_active = false
                             hideAppsGrid()
                         }
                         
@@ -552,6 +565,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                         } else {
                             Log.d(TAG, "🔓 MODO_KIOSK DESATIVADO")
                             disableKioskMode()
+                            // Se is_active ainda está ativo, mantém modo kiosk do GelaFit Control
+                            if (currentIsActive == true) {
+                                enableGelaFitKioskMode()
+                            }
                         }
                         Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         
@@ -560,13 +577,18 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     }
                     
                     // Se modo_kiosk está ativo, garante que o app está sempre em foreground
-                    // Se apenas is_active está ativo, não força abertura do app (usuário escolhe pelo grid)
+                    // Se apenas is_active está ativo, mantém modo kiosk do GelaFit Control e não força abertura do app (usuário escolhe pelo grid)
                     if (currentKioskMode == true) {
                         ensureAppInForeground()
                     } else if (currentIsActive == true) {
                         // Quando apenas is_active está ativo, garante que apenas o app configurado pode estar aberto
                         // mas não força a abertura - o usuário escolhe pelo grid
+                        // Mantém modo kiosk do GelaFit Control ativo
+                        enableGelaFitKioskMode()
                         ensureOnlyConfiguredAppIsOpen()
+                    } else {
+                        // Se is_active está desativado, remove modo kiosk do GelaFit Control
+                        disableGelaFitKioskMode()
                     }
                     
                     delay(CHECK_INTERVAL_MS)
@@ -587,8 +609,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         
         if (isActive == true) {
             applyAppBlocking()
+            enableGelaFitKioskMode() // Mantém GelaFit Control em modo kiosk quando is_active = true
             showAppsGrid() // Sempre mostra o grid quando is_active está ativo
         } else {
+            disableGelaFitKioskMode() // Remove modo kiosk do GelaFit Control quando is_active = false
             hideAppsGrid()
         }
         
@@ -624,6 +648,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     
     /**
      * Habilita modo kiosk completo (app fixo sem possibilidade de fechar/minimizar)
+     * Usado quando kiosk_mode = true (abre o app configurado automaticamente)
      */
     private fun enableKioskMode() {
         runOnUiThread {
@@ -650,6 +675,36 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             window.clearFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
             window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
             window.clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
+    }
+    
+    /**
+     * Habilita modo kiosk do GelaFit Control quando is_active = true
+     * Mantém o GelaFit Control ativo sem permitir minimizar, mas não abre o app configurado
+     */
+    private fun enableGelaFitKioskMode() {
+        runOnUiThread {
+            // Impede fechamento da activity do GelaFit Control
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+            window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+            // Não abre o app configurado automaticamente - apenas mantém o GelaFit Control em modo kiosk
+        }
+    }
+    
+    /**
+     * Desabilita modo kiosk do GelaFit Control quando is_active = false
+     */
+    private fun disableGelaFitKioskMode() {
+        runOnUiThread {
+            // Só remove as flags se kiosk_mode também não estiver ativo
+            if (kioskMode != true) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+            }
         }
     }
     

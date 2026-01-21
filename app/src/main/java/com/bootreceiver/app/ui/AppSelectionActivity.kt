@@ -118,6 +118,24 @@ class AppSelectionActivity : AppCompatActivity() {
                     preferenceManager.setDeviceRegistered(true)
                     preferenceManager.saveUnitName(unitName)
                     
+                    // Após registrar, carrega imediatamente os valores de is_active e kiosk_mode do banco para o cache
+                    try {
+                        val status = withContext(Dispatchers.IO) {
+                            supabaseManager.getDeviceStatus(deviceId)
+                        }
+                        if (status != null) {
+                            preferenceManager.saveIsActiveCached(status.isActive)
+                            preferenceManager.saveKioskModeCached(status.kioskMode)
+                            preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                            Log.d(TAG, "Cache atualizado após registro: is_active=${status.isActive}, kiosk_mode=${status.kioskMode}")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Erro ao carregar status após registro: ${e.message}")
+                        // Define valores padrão no cache caso não consiga buscar do banco
+                        preferenceManager.saveIsActiveCached(true)  // Padrão após registro
+                        preferenceManager.saveKioskModeCached(false)  // Padrão após registro
+                    }
+                    
                     Toast.makeText(
                         this@AppSelectionActivity,
                         "Dispositivo registrado com sucesso!",

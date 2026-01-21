@@ -453,12 +453,13 @@ class SupabaseManager {
             }
             
             if (existingDevice != null) {
-                // Dispositivo já existe, atualiza last_seen e unit_name se fornecido
-                // IMPORTANTE: NUNCA altera o device_id. Também força kiosk_mode = false para não ativar sozinho em reinstalação/novo email
-                Log.d(TAG, "Dispositivo já existe (device_id: ${existingDevice.device_id}, kiosk_mode: ${existingDevice.kiosk_mode}, is_active: ${existingDevice.is_active}). Atualizando unit_name/last_seen e resetando kiosk_mode=false...")
+                // Dispositivo já existe, atualiza last_seen, unit_name, is_active e kiosk_mode
+                // IMPORTANTE: NUNCA altera o device_id. Seta is_active=true e kiosk_mode=false ao atualizar
+                Log.d(TAG, "Dispositivo já existe (device_id: ${existingDevice.device_id}, kiosk_mode: ${existingDevice.kiosk_mode}, is_active: ${existingDevice.is_active}). Atualizando unit_name/last_seen, setando is_active=true e kiosk_mode=false...")
                 val updateData = mutableMapOf<String, Any>(
                     "last_seen" to java.time.Instant.now().toString(),
-                    "kiosk_mode" to false // garante que não volte ativo automaticamente
+                    "is_active" to true,  // Sempre seta is_active como true ao atualizar
+                    "kiosk_mode" to false // Sempre seta kiosk_mode como false ao atualizar
                 )
                 
                 if (unitName != null && unitName.isNotBlank()) {
@@ -473,7 +474,7 @@ class SupabaseManager {
                         }
                     }
                 
-                Log.d(TAG, "✅ Dispositivo atualizado (device_id mantido: ${existingDevice.device_id}), kiosk_mode forçado para false, is_active preservado: ${existingDevice.is_active}")
+                Log.d(TAG, "✅ Dispositivo atualizado (device_id mantido: ${existingDevice.device_id}), is_active=true, kiosk_mode=false")
             } else {
                 // Novo dispositivo, cria registro
                 Log.d(TAG, "Criando novo registro de dispositivo com device_id: $deviceId")
