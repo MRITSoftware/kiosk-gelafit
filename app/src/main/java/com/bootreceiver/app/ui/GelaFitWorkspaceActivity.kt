@@ -19,6 +19,8 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.PopupMenu
 import android.widget.TextView
+import android.widget.Toast
+import android.widget.RelativeLayout
 import android.os.Handler
 import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
@@ -152,11 +154,50 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     }
 
     /**
-     * Configura a área de desbloqueio por long press (5s no canto superior direito)
+     * Configura a área de desbloqueio por long press (5s - posição configurável)
      */
     private fun setupUnlockHotspot() {
         val hotspot = findViewById<View>(R.id.unlockHotspot)
         unlockHandler = Handler(Looper.getMainLooper())
+        
+        // Aplica posição configurada
+        val position = preferenceManager.getUnlockHotspotPosition()
+        val layoutParams = hotspot.layoutParams as RelativeLayout.LayoutParams
+        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_TOP)
+        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_START)
+        layoutParams.removeRule(RelativeLayout.ALIGN_PARENT_END)
+        
+        when (position) {
+            "top_left" -> {
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_START)
+                layoutParams.setMargins(16, 16, 0, 0)
+            }
+            "top_right" -> {
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_TOP)
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_END)
+                layoutParams.setMargins(0, 16, 16, 0)
+            }
+            "bottom_left" -> {
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_START)
+                layoutParams.setMargins(16, 0, 0, 16)
+            }
+            "bottom_right" -> {
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_END)
+                layoutParams.setMargins(0, 0, 16, 16)
+            }
+            else -> {
+                // Default: bottom_right
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+                layoutParams.addRule(RelativeLayout.ALIGN_PARENT_END)
+                layoutParams.setMargins(0, 0, 16, 16)
+            }
+        }
+        hotspot.layoutParams = layoutParams
+        
         hotspot.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -168,6 +209,29 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             }
             true
         }
+    }
+    
+    /**
+     * Configura a posição da área de desbloqueio
+     */
+    private fun configureUnlockHotspot() {
+        val positions = arrayOf("Canto Superior Esquerdo", "Canto Superior Direito", "Canto Inferior Esquerdo", "Canto Inferior Direito")
+        val positionValues = arrayOf("top_left", "top_right", "bottom_left", "bottom_right")
+        
+        val currentPosition = preferenceManager.getUnlockHotspotPosition()
+        val currentIndex = positionValues.indexOf(currentPosition).takeIf { it >= 0 } ?: 3
+        
+        AlertDialog.Builder(this)
+            .setTitle("Configurar Área de Desbloqueio")
+            .setMessage("Escolha onde tocar e segurar por 5 segundos para desbloquear:")
+            .setSingleChoiceItems(positions, currentIndex) { dialog, which ->
+                preferenceManager.saveUnlockHotspotPosition(positionValues[which])
+                setupUnlockHotspot() // Reconfigura o hotspot
+                dialog.dismiss()
+                Toast.makeText(this, "Área de desbloqueio configurada: ${positions[which]}", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     /**
@@ -295,6 +359,10 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                 }
                 R.id.menu_add_product -> {
                     addProductToGrid()
+                    true
+                }
+                R.id.menu_configure_unlock -> {
+                    configureUnlockHotspot()
                     true
                 }
                 else -> false

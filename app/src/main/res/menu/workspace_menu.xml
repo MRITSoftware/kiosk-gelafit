@@ -6,4 +6,7 @@
     <item
         android:id="@+id/menu_add_product"
         android:title="Adicionar app" />
+    <item
+        android:id="@+id/menu_configure_unlock"
+        android:title="Configurar Área de Desbloqueio" />
 </menu>

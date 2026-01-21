@@ -111,6 +111,15 @@ class PreferenceManager(context: Context) {
     fun getStatusLastSync(): Long {
         return prefs.getLong(KEY_STATUS_LAST_SYNC, 0L)
     }
+
+    // Configuração da área de desbloqueio
+    fun saveUnlockHotspotPosition(position: String) {
+        prefs.edit().putString(KEY_UNLOCK_HOTSPOT_POSITION, position).apply()
+    }
+
+    fun getUnlockHotspotPosition(): String {
+        return prefs.getString(KEY_UNLOCK_HOTSPOT_POSITION, "bottom_right") ?: "bottom_right"
+    }
     
     companion object {
         private const val PREFS_NAME = "BootReceiverPrefs"
@@ -121,5 +130,6 @@ class PreferenceManager(context: Context) {
         private const val KEY_CACHED_IS_ACTIVE = "cached_is_active"
         private const val KEY_CACHED_KIOSK_MODE = "cached_kiosk_mode"
         private const val KEY_STATUS_LAST_SYNC = "status_last_sync"
+        private const val KEY_UNLOCK_HOTSPOT_POSITION = "unlock_hotspot_position"
     }
 }

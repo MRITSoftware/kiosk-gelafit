@@ -454,7 +454,8 @@ class SupabaseManager {
             
             if (existingDevice != null) {
                 // Dispositivo já existe, atualiza last_seen e unit_name se fornecido
-                Log.d(TAG, "Dispositivo já existe. Atualizando...")
+                // IMPORTANTE: NUNCA altera o device_id, kiosk_mode ou is_active - sempre mantém os valores originais
+                Log.d(TAG, "Dispositivo já existe (device_id: ${existingDevice.device_id}, kiosk_mode: ${existingDevice.kiosk_mode}, is_active: ${existingDevice.is_active}). Atualizando apenas unit_name e last_seen...")
                 val updateData = mutableMapOf<String, Any>(
                     "last_seen" to java.time.Instant.now().toString()
                 )
@@ -463,19 +464,21 @@ class SupabaseManager {
                     updateData["unit_name"] = unitName
                 }
                 
+                // CRÍTICO: Sempre atualiza pelo device_id original do banco, nunca cria novo
+                // NÃO altera kiosk_mode ou is_active - mantém os valores existentes
                 client.from("devices")
                     .update(updateData) {
                         filter {
-                            eq("device_id", deviceId)
+                            eq("device_id", existingDevice.device_id) // Usa o device_id do banco, não o fornecido
                         }
                     }
                 
-                Log.d(TAG, "Dispositivo atualizado com sucesso")
+                Log.d(TAG, "✅ Dispositivo atualizado com sucesso (device_id mantido: ${existingDevice.device_id}, kiosk_mode preservado: ${existingDevice.kiosk_mode}, is_active preservado: ${existingDevice.is_active})")
             } else {
                 // Novo dispositivo, cria registro
-                Log.d(TAG, "Criando novo registro de dispositivo...")
+                Log.d(TAG, "Criando novo registro de dispositivo com device_id: $deviceId")
                 val newDevice = Device(
-                    device_id = deviceId,
+                    device_id = deviceId, // Usa o device_id fornecido
                     unit_name = unitName,
                     is_active = true,  // Por padrão, dispositivo é criado como ativo
                     kiosk_mode = false // Kiosk sempre inicia desativado; só ativa via botão
@@ -484,7 +487,7 @@ class SupabaseManager {
                 client.from("devices")
                     .insert(newDevice)
                 
-                Log.d(TAG, "Dispositivo registrado com sucesso!")
+                Log.d(TAG, "✅ Dispositivo registrado com sucesso! (device_id: $deviceId, kiosk_mode: false)")
             }
             
             true

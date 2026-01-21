@@ -36,16 +36,6 @@
             android:contentDescription="Menu"
             android:tint="#FFFFFF" />
 
-        <!-- Área oculta para desbloqueio (long press 5s no canto inferior direito) -->
-        <View
-            android:id="@+id/unlockHotspot"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_alignParentBottom="true"
-            android:layout_alignParentEnd="true"
-            android:contentDescription="Unlock Area"
-            android:background="@android:color/transparent" />
-
     </LinearLayout>
 
     <!-- Botão para ativar modo kiosk -->
@@ -97,6 +87,18 @@
             android:textSize="14sp" />
 
     </LinearLayout>
+
+    <!-- Área oculta para desbloqueio (long press 5s - configurável) -->
+    <View
+        android:id="@+id/unlockHotspot"
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginBottom="16dp"
+        android:layout_marginEnd="16dp"
+        android:contentDescription="Unlock Area"
+        android:background="@android:color/transparent" />
 
     <!-- Container para o app escolhido (quando modo_kiosk está ativo) -->
     <!-- O app escolhido será aberto e exibido sobre esta Activity -->
