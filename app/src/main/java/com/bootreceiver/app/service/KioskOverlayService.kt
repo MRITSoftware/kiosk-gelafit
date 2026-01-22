@@ -4,7 +4,11 @@ import android.app.Service
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -12,7 +16,13 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.Toast
 import com.bootreceiver.app.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Serviço que cria um overlay invisível para interceptar gestos de minimização
@@ -24,6 +34,15 @@ class KioskOverlayService : Service() {
     
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private var isKioskEnabled = false
+    private var monitoringJob: Job? = null
+    
+    // Contador de cliques para forçar sincronização
+    private var tapCount = 0
+    private var lastTapTime = 0L
+    private val TAP_TIMEOUT_MS = 1000L // 1 segundo entre cliques
+    private val REQUIRED_TAPS = 5 // 5 cliques para forçar sync
     
     override fun onBind(intent: Intent?): IBinder? = null
     
@@ -34,15 +53,85 @@ class KioskOverlayService : Service() {
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val kioskEnabled = intent?.getBooleanExtra("kiosk_enabled", false) ?: false
+        isKioskEnabled = intent?.getBooleanExtra("kiosk_enabled", false) ?: false
         
-        if (kioskEnabled) {
-            showOverlay()
+        if (isKioskEnabled) {
+            // Inicia monitoramento contínuo para verificar activities permitidas
+            startMonitoring()
+            updateOverlayVisibility()
         } else {
+            stopMonitoring()
             hideOverlay()
         }
         
         return START_NOT_STICKY
+    }
+    
+    /**
+     * Inicia monitoramento contínuo para verificar se activities permitidas estão em foreground
+     */
+    private fun startMonitoring() {
+        monitoringJob?.cancel()
+        monitoringJob = serviceScope.launch {
+            while (isKioskEnabled) {
+                updateOverlayVisibility()
+                delay(500) // Verifica a cada 500ms
+            }
+        }
+    }
+    
+    /**
+     * Para o monitoramento
+     */
+    private fun stopMonitoring() {
+        monitoringJob?.cancel()
+        monitoringJob = null
+    }
+    
+    /**
+     * Atualiza visibilidade do overlay baseado em se uma activity permitida está em foreground
+     */
+    private fun updateOverlayVisibility() {
+        val isAllowedActivityInForeground = checkIfAllowedActivityInForeground()
+        
+        if (isKioskEnabled && !isAllowedActivityInForeground) {
+            if (overlayView == null) {
+                showOverlay()
+            }
+        } else {
+            if (overlayView != null) {
+                hideOverlay()
+            }
+        }
+    }
+    
+    /**
+     * Verifica se uma activity permitida está em foreground
+     * Activities permitidas: SettingsCheckActivity, AddProductActivity
+     */
+    private fun checkIfAllowedActivityInForeground(): Boolean {
+        try {
+            val activityManager = getSystemService(android.app.ActivityManager::class.java)
+            val allowedActivities = setOf(
+                "com.bootreceiver.app.ui.SettingsCheckActivity",
+                "com.bootreceiver.app.ui.AddProductActivity"
+            )
+            
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                val runningTasks = activityManager.getAppTasks()
+                if (runningTasks != null && runningTasks.isNotEmpty()) {
+                    val topTask = runningTasks[0]
+                    val taskInfo = topTask.taskInfo
+                    if (taskInfo != null && taskInfo.topActivity != null) {
+                        val topActivity = taskInfo.topActivity!!.className
+                        return topActivity in allowedActivities
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Erro ao verificar activity em foreground: ${e.message}")
+        }
+        return false
     }
     
     private fun showOverlay() {
@@ -86,6 +175,9 @@ class KioskOverlayService : Service() {
                             if (isLeftEdge || isRightEdge) {
                                 isTrackingBackGesture = true
                                 Log.d(TAG, "🔍 Rastreando possível gesto de voltar (borda ${if (isLeftEdge) "esquerda" else "direita"})")
+                            } else {
+                                // Se não é gesto de voltar, processa para detecção de 5 cliques
+                                handleTap()
                             }
                             
                             // SEMPRE permite ACTION_DOWN passar - não bloqueia cliques
@@ -150,9 +242,10 @@ class KioskOverlayService : Service() {
                     @Suppress("DEPRECATION")
                     WindowManager.LayoutParams.TYPE_PHONE
                 },
-                // FLAG_NOT_TOUCHABLE permite que toques passem através do overlay
-                // Mas precisamos interceptar gestos de voltar, então usamos FLAG_NOT_TOUCH_MODAL
-                // que permite toques passarem mas ainda recebe eventos
+                // FLAG_NOT_TOUCH_MODAL permite que toques passem através do overlay
+                // mas ainda recebe eventos para interceptar gestos de voltar
+                // IMPORTANTE: O setOnTouchListener retorna false na maioria dos casos,
+                // permitindo que cliques normais funcionem normalmente
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                     or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
@@ -185,9 +278,65 @@ class KioskOverlayService : Service() {
         }
     }
     
+    /**
+     * Processa toques na tela para detectar 5 cliques consecutivos
+     */
+    private fun handleTap() {
+        val currentTime = System.currentTimeMillis()
+        
+        // Se passou muito tempo desde o último clique, reseta contador
+        if (currentTime - lastTapTime > TAP_TIMEOUT_MS) {
+            tapCount = 0
+        }
+        
+        lastTapTime = currentTime
+        tapCount++
+        
+        Log.d(TAG, "👆 Clique detectado no overlay ($tapCount/$REQUIRED_TAPS)")
+        
+        // Se chegou a 5 cliques, força sincronização
+        if (tapCount >= REQUIRED_TAPS) {
+            tapCount = 0 // Reseta contador
+            Log.d(TAG, "🔄 5 cliques detectados no overlay! Forçando sincronização imediata...")
+            forceSync()
+            
+            // Mostra feedback visual
+            vibrateShort()
+            Toast.makeText(this, "🔄 Sincronizando com banco...", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * Força sincronização enviando broadcast para KioskModeService
+     */
+    private fun forceSync() {
+        val intent = Intent("com.bootreceiver.app.FORCE_SYNC")
+        sendBroadcast(intent)
+        Log.d(TAG, "📡 Broadcast de sincronização forçada enviado")
+    }
+    
+    /**
+     * Vibração curta para feedback
+     */
+    private fun vibrateShort() {
+        try {
+            val vibrator = getSystemService(VIBRATOR_SERVICE) as Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(100)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Erro ao vibrar: ${e.message}")
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        stopMonitoring()
         hideOverlay()
+        serviceScope.cancel()
         Log.d(TAG, "KioskOverlayService destruído")
     }
     

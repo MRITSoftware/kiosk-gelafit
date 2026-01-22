@@ -110,6 +110,12 @@ class AppSelectionActivity : AppCompatActivity() {
     private fun registerDevice(deviceId: String, unitName: String) {
         CoroutineScope(Dispatchers.Main).launch {
             try {
+                // CRÍTICO: Define cache como false ANTES de registrar, para evitar que serviços iniciem com is_active=true
+                preferenceManager.saveIsActiveCached(false)
+                preferenceManager.saveKioskModeCached(false)
+                preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                Log.d(TAG, "Cache definido como false antes do registro")
+                
                 val supabaseManager = com.bootreceiver.app.utils.SupabaseManager()
                 val success = supabaseManager.registerDevice(deviceId, unitName)
                 
@@ -118,23 +124,49 @@ class AppSelectionActivity : AppCompatActivity() {
                     preferenceManager.setDeviceRegistered(true)
                     preferenceManager.saveUnitName(unitName)
                     
-                    // Após registrar, carrega imediatamente os valores de is_active e kiosk_mode do banco para o cache
+                    // Após registrar, verifica os valores do banco mas garante que is_active seja false
                     try {
                         val status = withContext(Dispatchers.IO) {
                             supabaseManager.getDeviceStatus(deviceId)
                         }
                         if (status != null) {
-                            preferenceManager.saveIsActiveCached(status.isActive)
-                            preferenceManager.saveKioskModeCached(status.kioskMode)
+                            // CRÍTICO: Se o banco retornar is_active=true (erro), força false
+                            val isActiveFromDb = status.isActive
+                            val kioskModeFromDb = status.kioskMode
+                            
+                            // Se is_active veio como true do banco, algo está errado - força false
+                            if (isActiveFromDb) {
+                                Log.w(TAG, "⚠️ ATENÇÃO: Banco retornou is_active=true após registro! Forçando false...")
+                                // Atualiza o banco para false
+                                withContext(Dispatchers.IO) {
+                                    supabaseManager.updateIsActive(deviceId, false)
+                                }
+                                preferenceManager.saveIsActiveCached(false)
+                            } else {
+                                preferenceManager.saveIsActiveCached(false) // Garante false mesmo se banco retornar false
+                            }
+                            
+                            // kiosk_mode sempre deve ser false após registro
+                            if (kioskModeFromDb) {
+                                Log.w(TAG, "⚠️ ATENÇÃO: Banco retornou kiosk_mode=true após registro! Forçando false...")
+                                withContext(Dispatchers.IO) {
+                                    supabaseManager.updateKioskMode(deviceId, false)
+                                }
+                                preferenceManager.saveKioskModeCached(false)
+                            } else {
+                                preferenceManager.saveKioskModeCached(false)
+                            }
+                            
                             preferenceManager.saveStatusLastSync(System.currentTimeMillis())
-                            Log.d(TAG, "Cache atualizado após registro: is_active=${status.isActive}, kiosk_mode=${status.kioskMode}")
+                            Log.d(TAG, "✅ Cache garantido como false após registro: is_active=false, kiosk_mode=false")
+                        } else {
+                            // Se não conseguiu buscar, mantém false que já foi definido
+                            Log.d(TAG, "Status não encontrado, mantendo cache como false")
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Erro ao carregar status após registro: ${e.message}")
-                        // Define valores padrão no cache caso não consiga buscar do banco
-                        // is_active deve ser false inicialmente (só fica true após primeiro acesso)
-                        preferenceManager.saveIsActiveCached(false)  // Sempre false após registro
-                        preferenceManager.saveKioskModeCached(false)  // Sempre false após registro
+                        // Mantém false que já foi definido antes do registro
+                        Log.d(TAG, "Mantendo cache como false após erro")
                     }
                     
                     Toast.makeText(
@@ -353,6 +385,7 @@ class AppSelectionActivity : AppCompatActivity() {
     
     /**
      * Salva o app selecionado e abre o GelaFit Workspace imediatamente
+     * Atualiza is_active para true após selecionar o app
      */
     private fun selectApp(packageName: String, appName: String) {
         Log.d(TAG, "App selecionado: $appName ($packageName)")
@@ -364,6 +397,36 @@ class AppSelectionActivity : AppCompatActivity() {
         val currentApps = preferenceManager.getSelectedAppsList().toMutableSet()
         currentApps.add(packageName)
         preferenceManager.saveSelectedAppsList(currentApps)
+        
+        // CRÍTICO: NÃO atualiza is_active para true automaticamente após selecionar o app
+        // is_active e kiosk_mode devem ser FALSE por padrão e só ativados manualmente pelo usuário
+        // Garante que ambos permaneçam como false
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val deviceId = DeviceIdManager.getDeviceId(this@AppSelectionActivity)
+                val supabaseManager = com.bootreceiver.app.utils.SupabaseManager()
+                
+                // Garante que is_active e kiosk_mode sejam false
+                val activeSuccess = withContext(Dispatchers.IO) {
+                    supabaseManager.updateIsActive(deviceId, false)
+                }
+                val kioskSuccess = withContext(Dispatchers.IO) {
+                    supabaseManager.updateKioskMode(deviceId, false)
+                }
+                
+                if (activeSuccess && kioskSuccess) {
+                    // Atualiza cache local como false
+                    preferenceManager.saveIsActiveCached(false)
+                    preferenceManager.saveKioskModeCached(false)
+                    preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                    Log.d(TAG, "✅ is_active e kiosk_mode garantidos como false após selecionar app")
+                } else {
+                    Log.w(TAG, "⚠️ Falha ao garantir is_active e kiosk_mode como false no banco")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Erro ao garantir is_active e kiosk_mode como false: ${e.message}", e)
+            }
+        }
         
         // Abre o GelaFit Workspace imediatamente (sem delay)
         val intent = Intent(this, GelaFitWorkspaceActivity::class.java)

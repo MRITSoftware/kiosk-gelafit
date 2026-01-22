@@ -68,6 +68,13 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     private var isOpeningAllowedActivity = false // Flag para permitir abrir activities permitidas
     private lateinit var appsGridRecyclerView: RecyclerView
     private val selectedApps = mutableListOf<AppInfo>()
+    
+    // Contador de cliques para forçar sincronização
+    private var tapCount = 0
+    private var lastTapTime = 0L
+    private val TAP_TIMEOUT_MS = 1000L // 1 segundo entre cliques
+    private val REQUIRED_TAPS = 5 // 5 cliques para forçar sync
+    private var forceSyncJob: Job? = null // Job para forçar sincronização
     private val appAddedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val packageName = intent?.getStringExtra("package_name")
@@ -123,6 +130,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         
         // Mostra o grid por padrão (será ajustado conforme is_active)
         appsGridRecyclerView.visibility = View.VISIBLE
+        
+        // Configura detecção de 5 cliques para forçar sincronização
+        setupTapToSync()
         
         // Inicia monitoramento de is_active e modo_kiosk (verifica status inicial também)
         startMonitoring()
@@ -470,6 +480,105 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     }
     
     /**
+     * Configura detecção de 5 cliques na tela para forçar sincronização
+     */
+    private fun setupTapToSync() {
+        val rootView = findViewById<ViewGroup>(android.R.id.content)
+        rootView.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                handleTap()
+            }
+            false // Não consome o evento, permite que outros listeners funcionem
+        }
+    }
+    
+    /**
+     * Processa toques na tela para detectar 5 cliques consecutivos
+     */
+    private fun handleTap() {
+        val currentTime = System.currentTimeMillis()
+        
+        // Se passou muito tempo desde o último clique, reseta contador
+        if (currentTime - lastTapTime > TAP_TIMEOUT_MS) {
+            tapCount = 0
+        }
+        
+        lastTapTime = currentTime
+        tapCount++
+        
+        Log.d(TAG, "👆 Clique detectado ($tapCount/$REQUIRED_TAPS)")
+        
+        // Se chegou a 5 cliques, força sincronização
+        if (tapCount >= REQUIRED_TAPS) {
+            tapCount = 0 // Reseta contador
+            Log.d(TAG, "🔄 5 cliques detectados! Forçando sincronização imediata...")
+            forceSync()
+            
+            // Mostra feedback visual
+            runOnUiThread {
+                vibrateShort()
+                Toast.makeText(this, "🔄 Sincronizando com banco...", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    /**
+     * Força sincronização imediata com o banco (ignora intervalo de 15 minutos)
+     */
+    private fun forceSync() {
+        // Cancela job anterior se existir
+        forceSyncJob?.cancel()
+        
+        forceSyncJob = serviceScope.launch {
+            try {
+                Log.d(TAG, "🔄 Forçando sincronização imediata com banco...")
+                
+                val status = withContext(Dispatchers.IO) {
+                    supabaseManager.getDeviceStatus(deviceId)
+                }
+                
+                if (status != null) {
+                    val currentIsActive = status.isActive
+                    val currentKioskMode = status.kioskMode
+                    
+                    Log.d(TAG, "📊 Status do banco (forçado) - is_active: $currentIsActive, modo_kiosk: $currentKioskMode")
+                    
+                    // Atualiza cache
+                    preferenceManager.saveIsActiveCached(currentIsActive)
+                    preferenceManager.saveKioskModeCached(currentKioskMode)
+                    preferenceManager.saveStatusLastSync(System.currentTimeMillis())
+                    
+                    // Atualiza variáveis locais
+                    isActive = currentIsActive
+                    kioskMode = currentKioskMode
+                    
+                    // Atualiza visibilidade dos botões
+                    updateKioskButtonVisibility(currentIsActive == true, currentKioskMode == true)
+                    
+                    // Aplica configurações se mudou
+                    applyInitialSettings()
+                    
+                    runOnUiThread {
+                        Toast.makeText(this@GelaFitWorkspaceActivity, "✅ Sincronizado! is_active=$currentIsActive, kiosk_mode=$currentKioskMode", Toast.LENGTH_LONG).show()
+                    }
+                    
+                    Log.d(TAG, "✅ Sincronização forçada concluída")
+                } else {
+                    Log.w(TAG, "⚠️ Status não encontrado no banco")
+                    runOnUiThread {
+                        Toast.makeText(this@GelaFitWorkspaceActivity, "⚠️ Erro ao sincronizar", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Erro ao forçar sincronização: ${e.message}", e)
+                runOnUiThread {
+                    Toast.makeText(this@GelaFitWorkspaceActivity, "❌ Erro: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    /**
      * Mostra o popup menu com opções
      */
     private fun showMenuPopup(view: View) {
@@ -761,11 +870,11 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                             
                             if (currentKioskMode == true) {
                                 Log.d(TAG, "🔒 MODO_KIOSK ATIVADO - App fixo na tela")
+                                // Quando kiosk_mode está ativo, o KioskModeService é responsável por abrir o app
+                                // A workspace apenas aplica as flags de kiosk mas não interfere
                                 enableKioskMode()
-                                val targetPackage = preferenceManager.getTargetPackageName()
-                                if (!targetPackage.isNullOrEmpty()) {
-                                    openConfiguredApp(targetPackage)
-                                }
+                                // NÃO abre o app aqui para evitar conflito com KioskModeService
+                                // O KioskModeService já está cuidando disso
                             } else {
                                 Log.d(TAG, "🔓 MODO_KIOSK DESATIVADO")
                                 disableKioskMode()
@@ -845,11 +954,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         
         if (kioskMode == true) {
             enableKioskMode()
-            // Quando modo_kiosk está ativo, abre o app automaticamente e mantém fixo
-            val targetPackage = preferenceManager.getTargetPackageName()
-            if (!targetPackage.isNullOrEmpty()) {
-                openConfiguredApp(targetPackage)
-            }
+            // Quando modo_kiosk está ativo, o KioskModeService é responsável por abrir o app
+            // A workspace apenas aplica as flags de kiosk mas não interfere
+            // NÃO abre o app aqui para evitar conflito com KioskModeService
         }
         // Não abre o app automaticamente quando apenas is_active está ativo
         // O usuário deve clicar no grid para abrir o app
@@ -875,7 +982,9 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
     
     /**
      * Habilita modo kiosk completo (app fixo sem possibilidade de fechar/minimizar)
-     * Usado quando kiosk_mode = true (abre o app configurado automaticamente)
+     * Usado quando kiosk_mode = true
+     * NOTA: Não abre o app configurado aqui - isso é responsabilidade do KioskModeService
+     * para evitar conflitos quando ambos is_active e kiosk_mode estão true
      */
     private fun enableKioskMode() {
         runOnUiThread {
@@ -884,12 +993,7 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
             window.addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
             window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
             window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
-            
-            // Abre o app configurado e mantém em foreground
-            val targetPackage = preferenceManager.getTargetPackageName()
-            if (!targetPackage.isNullOrEmpty()) {
-                openConfiguredApp(targetPackage)
-            }
+            // NÃO abre o app configurado aqui - o KioskModeService cuida disso
         }
     }
     
@@ -1056,29 +1160,55 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         super.onResume()
         Log.d(TAG, "onResume - Garantindo que tela do control está visível")
         
-        // Carrega status do cache local (resposta instantânea)
-        val cachedIsActive = preferenceManager.getIsActiveCached()
-        val cachedKioskMode = preferenceManager.getKioskModeCached()
-        
-        // Atualiza variáveis locais do cache
-        isActive = cachedIsActive
-        kioskMode = cachedKioskMode
-        
-        Log.d(TAG, "📦 Status do cache no onResume - is_active: $cachedIsActive, modo_kiosk: $cachedKioskMode")
-        
-        // Recarrega apps quando volta para a tela (caso tenha sido adicionado enquanto estava em outra tela)
-        loadSelectedApps()
-        
-        // Se is_active está ativo, mostra o grid
-        if (isActive == true) {
-            showAppsGrid()
+        // Garante que a view está visível antes de fazer qualquer ação
+        // Isso previne tela preta ao voltar do kiosk mode
+        window.decorView.post {
+            // Carrega status do cache local (resposta instantânea)
+            val cachedIsActive = preferenceManager.getIsActiveCached()
+            val cachedKioskMode = preferenceManager.getKioskModeCached()
+            
+            // Atualiza variáveis locais do cache
+            isActive = cachedIsActive
+            kioskMode = cachedKioskMode
+            
+            Log.d(TAG, "📦 Status do cache no onResume - is_active: $cachedIsActive, modo_kiosk: $cachedKioskMode")
+            
+            // Recarrega apps quando volta para a tela (caso tenha sido adicionado enquanto estava em outra tela)
+            loadSelectedApps()
+            
+            // Se is_active está ativo, mostra o grid
+            if (isActive == true) {
+                showAppsGrid()
+            }
+            
+            // Se modo_kiosk está ativo, garante que o app está em foreground
+            // Adiciona um pequeno delay para garantir que a view está totalmente renderizada
+            if (kioskMode == true) {
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val targetPackage = preferenceManager.getTargetPackageName()
+                    if (!targetPackage.isNullOrEmpty()) {
+                        openConfiguredApp(targetPackage)
+                    }
+                }, 300) // Delay de 300ms para garantir que a view está pronta
+            }
         }
-        
-        // Se modo_kiosk está ativo, garante que o app está em foreground
-        if (kioskMode == true) {
-            val targetPackage = preferenceManager.getTargetPackageName()
-            if (!targetPackage.isNullOrEmpty()) {
-                openConfiguredApp(targetPackage)
+    }
+    
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            Log.d(TAG, "onWindowFocusChanged - Window ganhou foco, garantindo que view está visível")
+            // Garante que a view está totalmente renderizada quando a janela ganha foco
+            // Isso previne tela preta ao voltar do kiosk mode
+            window.decorView.post {
+                // Força a view a ser renderizada
+                window.decorView.invalidate()
+                window.decorView.requestLayout()
+                
+                // Se is_active está ativo, mostra o grid
+                if (isActive == true) {
+                    showAppsGrid()
+                }
             }
         }
     }
@@ -1108,8 +1238,8 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
         // Mas permite se kiosk_mode=false (pode acessar configurações)
         if (isActive == true && !gelafitUnlocked && kioskMode == true) {
             Log.d(TAG, "🔒 Tentativa de pausar bloqueada (is_active = true, kiosk_mode = true, não desbloqueado)")
-            // Reabre INSTANTANEAMENTE sem delay para resposta imediata
-            Handler(Looper.getMainLooper()).post {
+            // Reabre com delay para garantir que a view está pronta e evitar tela preta
+            Handler(Looper.getMainLooper()).postDelayed({
                 showAppsGrid()
                 // Garante que a activity está em foreground
                 if (!isFinishing) {
@@ -1117,15 +1247,16 @@ class GelaFitWorkspaceActivity : AppCompatActivity() {
                     intent.flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     startActivity(intent)
                 }
-            }
+            }, 200) // Delay para garantir que a view está pronta
         } else if (kioskMode == true && !targetAppUnlocked) {
             // Quando modo_kiosk está ativo E não está desbloqueado, abre o app automaticamente
+            // Adiciona delay maior para garantir que a view está totalmente renderizada
             Handler(Looper.getMainLooper()).postDelayed({
                 val targetPackage = preferenceManager.getTargetPackageName()
                 if (!targetPackage.isNullOrEmpty()) {
                     openConfiguredApp(targetPackage)
                 }
-            }, 100) // Delay mínimo para resposta rápida
+            }, 300) // Delay maior para evitar tela preta
         } else {
             // Se está desbloqueado ou is_active=true mas kiosk_mode=false, permite minimizar normalmente
             Log.d(TAG, "🔓 Pausa permitida (desbloqueado ou is_active=true mas kiosk_mode=false)")
