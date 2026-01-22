@@ -31,9 +31,6 @@ jobs:
         packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
         accept-android-sdk-licenses: true
         
-<<<<<<< HEAD
-    - name: Setup Gradle Wrapper
-=======
     - name: Find gradlew and set working directory
       id: find_gradlew
       run: |
@@ -65,7 +62,6 @@ jobs:
         
     - name: Setup Gradle Wrapper
       working-directory: ${{ env.WORKING_DIR }}
->>>>>>> 1fe809395669a8061a49dd3e6c2074a177391d01
       run: |
         # Verifica se gradlew existe
         if [ ! -f "./gradlew" ]; then
@@ -136,20 +132,14 @@ jobs:
         echo "Tag: $TAG_NAME"
       
     - name: Build Release APK
-<<<<<<< HEAD
-=======
       working-directory: ${{ env.WORKING_DIR }}
->>>>>>> 1fe809395669a8061a49dd3e6c2074a177391d01
       run: ./gradlew assembleRelease --stacktrace --no-daemon --warning-mode all
       env:
         ANDROID_HOME: ${{ env.ANDROID_HOME }}
         ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
       
     - name: Locate APK (signed or unsigned)
-<<<<<<< HEAD
-=======
       working-directory: ${{ env.WORKING_DIR }}
->>>>>>> 1fe809395669a8061a49dd3e6c2074a177391d01
       run: |
         APK_SIGNED="app/build/outputs/apk/release/app-release.apk"
         APK_UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
@@ -165,20 +155,13 @@ jobs:
           exit 1
         fi
         
-<<<<<<< HEAD
-        echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
-=======
         echo "APK_PATH=${{ env.WORKING_DIR }}/$APK_PATH" >> $GITHUB_ENV
->>>>>>> 1fe809395669a8061a49dd3e6c2074a177391d01
         ls -lh "$APK_PATH"
         echo "✅ APK localizado em: $APK_PATH"
       
     - name: Get APK file info
       id: apk_info
-<<<<<<< HEAD
-=======
       working-directory: ${{ env.WORKING_DIR }}
->>>>>>> 1fe809395669a8061a49dd3e6c2074a177391d01
       run: |
         APK_PATH="${APK_PATH:-app/build/outputs/apk/release/app-release.apk}"
         APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
