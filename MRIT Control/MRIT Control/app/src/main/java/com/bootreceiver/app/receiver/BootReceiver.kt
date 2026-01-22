@@ -11,9 +11,9 @@ import com.bootreceiver.app.utils.PreferenceManager
 /**
  * BroadcastReceiver que escuta o evento de boot completo do Android
  * 
- * Quando o dispositivo é ligado ou reiniciado, o sistema Android envia
+ * Quando o dispositivo Ã© ligado ou reiniciado, o sistema Android envia
  * o broadcast BOOT_COMPLETED. Este receiver captura esse evento e inicia
- * o serviço que verifica internet e abre o app configurado.
+ * o serviÃ§o que verifica internet e abre o app configurado.
  */
 class BootReceiver : BroadcastReceiver() {
     
@@ -23,69 +23,55 @@ class BootReceiver : BroadcastReceiver() {
             "android.intent.action.QUICKBOOT_POWERON" -> {
                 Log.d(TAG, "Boot detectado! Iniciando processo...")
                 
-                // Verifica permissões e otimizações
+                // Verifica permissÃµes e otimizaÃ§Ãµes
                 val permissionChecker = PermissionChecker(context)
                 val status = permissionChecker.getFullStatus()
                 
                 if (!status.isReady) {
                     Log.w(TAG, "Problemas detectados que podem impedir funcionamento:")
                     status.issues.forEach { issue ->
-                        Log.w(TAG, "  - $issue")
+                        Log.w(TAG, "  - ")
                     }
                     // Continua mesmo assim, mas registra o problema
                 } else {
-                    Log.d(TAG, "Todas as permissões e otimizações estão corretas")
+                    Log.d(TAG, "Todas as permissÃµes e otimizaÃ§Ãµes estÃ£o corretas")
                 }
                 
-                // Verifica se já foi configurado um app para iniciar
+                // Verifica se jÃ¡ foi configurado um app para iniciar
                 val preferenceManager = PreferenceManager(context)
                 val targetPackageName = preferenceManager.getTargetPackageName()
                 
                 if (targetPackageName.isNullOrEmpty()) {
-                    Log.w(TAG, "Nenhum app configurado. Abrindo tela de seleção...")
-                    // Se não houver app configurado, abre a tela de seleção
+                    Log.w(TAG, "Nenhum app configurado. Abrindo tela de seleÃ§Ã£o...")
+                    // Se nÃ£o houver app configurado, abre a tela de seleÃ§Ã£o
                     // Usa FLAG_ACTIVITY_NEW_TASK e FLAG_ACTIVITY_CLEAR_TOP para garantir que abra mesmo com tela bloqueada
                     val selectionIntent = Intent(context, 
                         com.bootreceiver.app.ui.AppSelectionActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
                                 Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        // Tenta abrir mesmo com tela bloqueada (requer permissão em Android 10+)
+                        // Tenta abrir mesmo com tela bloqueada (requer permissÃ£o em Android 10+)
                         addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     }
                     try {
                         context.startActivity(selectionIntent)
-                        Log.d(TAG, "Tela de seleção iniciada")
+                        Log.d(TAG, "Tela de seleÃ§Ã£o iniciada")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Erro ao abrir tela de seleção: ${e.message}", e)
+                        Log.e(TAG, "Erro ao abrir tela de seleÃ§Ã£o: ", e)
                     }
                 } else {
-                    Log.d(TAG, "App alvo configurado: $targetPackageName")
-                    // Abre a área de trabalho do GelaFit Control (que por sua vez abre o app configurado)
-                    val workspaceIntent = Intent(context, 
-                        com.bootreceiver.app.ui.GelaFitWorkspaceActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                    }
+                    Log.d(TAG, "App alvo configurado: ")
+                    // Inicia o serviÃ§o que verifica internet e abre o app
+                    val serviceIntent = Intent(context, BootService::class.java)
                     try {
-                        context.startActivity(workspaceIntent)
-                        Log.d(TAG, "Área de trabalho iniciada")
+                        context.startService(serviceIntent)
+                        Log.d(TAG, "BootService iniciado")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Erro ao abrir área de trabalho: ${e.message}", e)
-                        // Fallback: inicia o serviço que verifica internet e abre o app diretamente
-                        val serviceIntent = Intent(context, BootService::class.java)
-                        try {
-                            context.startService(serviceIntent)
-                            Log.d(TAG, "BootService iniciado (fallback)")
-                        } catch (e2: Exception) {
-                            Log.e(TAG, "Erro ao iniciar BootService: ${e2.message}", e2)
-                        }
+                        Log.e(TAG, "Erro ao iniciar BootService: ", e)
                     }
                 }
                 
-                // Sempre inicia o serviço principal de monitoramento de app (sempre roda em background)
+                // Sempre inicia o serviÃ§o principal de monitoramento de app (sempre roda em background)
                 val appMonitorIntent = Intent(context, 
                     com.bootreceiver.app.service.AppMonitorService::class.java)
                 try {
@@ -96,10 +82,10 @@ class BootReceiver : BroadcastReceiver() {
                     }
                     Log.d(TAG, "AppMonitorService iniciado")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Erro ao iniciar AppMonitorService: ${e.message}", e)
+                    Log.e(TAG, "Erro ao iniciar AppMonitorService: ", e)
                 }
                 
-                // Sempre inicia o serviço de monitoramento de comandos de reiniciar app
+                // Sempre inicia o serviÃ§o de monitoramento de comandos de reiniciar app
                 val restartMonitorIntent = Intent(context, 
                     com.bootreceiver.app.service.AppRestartMonitorService::class.java)
                 try {
@@ -110,10 +96,10 @@ class BootReceiver : BroadcastReceiver() {
                     }
                     Log.d(TAG, "AppRestartMonitorService iniciado")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Erro ao iniciar AppRestartMonitorService: ${e.message}", e)
+                    Log.e(TAG, "Erro ao iniciar AppRestartMonitorService: ", e)
                 }
                 
-                // Inicia o serviço de monitoramento de modo kiosk
+                // Inicia o serviÃ§o de monitoramento de modo kiosk
                 val kioskIntent = Intent(context, 
                     com.bootreceiver.app.service.KioskModeService::class.java)
                 try {
@@ -124,11 +110,11 @@ class BootReceiver : BroadcastReceiver() {
                     }
                     Log.d(TAG, "KioskModeService iniciado")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Erro ao iniciar KioskModeService: ${e.message}", e)
+                    Log.e(TAG, "Erro ao iniciar KioskModeService: ", e)
                 }
             }
             else -> {
-                Log.w(TAG, "Ação desconhecida recebida: ${intent.action}")
+                Log.w(TAG, "AÃ§Ã£o desconhecida recebida: ")
             }
         }
     }

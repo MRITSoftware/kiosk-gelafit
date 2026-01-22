@@ -1,4 +1,4 @@
-package com.bootreceiver.app.utils
+﻿package com.bootreceiver.app.utils
 
 import android.app.AppOpsManager
 import android.content.Context

@@ -23,13 +23,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Serviço que monitora periodicamente o Supabase para verificar
- * se há comandos de reiniciar o app configurado
+ * ServiÃ§o que monitora periodicamente o Supabase para verificar
+ * se hÃ¡ comandos de reiniciar o app configurado
  * 
- * Este serviço:
- * 1. Verifica a cada 30 segundos se há um comando de reiniciar app
+ * Este serviÃ§o:
+ * 1. Verifica a cada 30 segundos se hÃ¡ um comando de reiniciar app
  * 2. Se encontrar, fecha e reabre o app configurado
- * 3. Marca o comando como executado após reiniciar
+ * 3. Marca o comando como executado apÃ³s reiniciar
  */
 class AppRestartMonitorService : Service() {
     
@@ -37,8 +37,8 @@ class AppRestartMonitorService : Service() {
     private var isRunning = false
     private val supabaseManager = SupabaseManager()
     private lateinit var deviceId: String
-    private var isRestarting = false // Flag para evitar múltiplos reinícios simultâneos
-    private val processedCommandIds = mutableSetOf<String>() // IDs de comandos já processados nesta sessão
+    private var isRestarting = false // Flag para evitar mÃºltiplos reinÃ­cios simultÃ¢neos
+    private val processedCommandIds = mutableSetOf<String>() // IDs de comandos jÃ¡ processados nesta sessÃ£o
     
     override fun onBind(intent: Intent?): IBinder? = null
     
@@ -51,7 +51,7 @@ class AppRestartMonitorService : Service() {
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (isRunning) {
-            Log.d(TAG, "Serviço já está rodando")
+            Log.d(TAG, "ServiÃ§o jÃ¡ estÃ¡ rodando")
             return START_STICKY
         }
         
@@ -59,7 +59,7 @@ class AppRestartMonitorService : Service() {
             isRunning = true
             Log.d(TAG, "AppRestartMonitorService iniciado para dispositivo: $deviceId")
             
-            // Garante que o canal de notificação existe
+            // Garante que o canal de notificaÃ§Ã£o existe
             createNotificationChannel()
             
             // Inicia como Foreground Service
@@ -76,7 +76,7 @@ class AppRestartMonitorService : Service() {
                 startMonitoring()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Erro crítico ao iniciar serviço: ${e.message}", e)
+            Log.e(TAG, "Erro crÃ­tico ao iniciar serviÃ§o: ${e.message}", e)
             isRunning = false
         }
         
@@ -84,7 +84,7 @@ class AppRestartMonitorService : Service() {
     }
     
     /**
-     * Cria o canal de notificação (necessário para Android 8.0+)
+     * Cria o canal de notificaÃ§Ã£o (necessÃ¡rio para Android 8.0+)
      */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -103,7 +103,7 @@ class AppRestartMonitorService : Service() {
     }
     
     /**
-     * Cria a notificação para o Foreground Service
+     * Cria a notificaÃ§Ã£o para o Foreground Service
      */
     private fun createNotification(): Notification {
         val intent = Intent(this, AppSelectionActivity::class.java)
@@ -135,18 +135,18 @@ class AppRestartMonitorService : Service() {
     }
     
     /**
-     * Inicia o monitoramento periódico do banco de dados
+     * Inicia o monitoramento periÃ³dico do banco de dados
      */
     private suspend fun startMonitoring() {
         while (isRunning) {
             try {
-                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                Log.d(TAG, "🔍 Ciclo de verificação #${System.currentTimeMillis() / CHECK_INTERVAL_MS}")
+                Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                Log.d(TAG, "ðŸ” Ciclo de verificaÃ§Ã£o #${System.currentTimeMillis() / CHECK_INTERVAL_MS}")
                 Log.d(TAG, "Device ID: $deviceId")
                 
-                // Verifica se já está reiniciando (evita múltiplos reinícios simultâneos)
+                // Verifica se jÃ¡ estÃ¡ reiniciando (evita mÃºltiplos reinÃ­cios simultÃ¢neos)
                 if (isRestarting) {
-                    Log.d(TAG, "⏳ Reinício já em andamento, aguardando...")
+                    Log.d(TAG, "â³ ReinÃ­cio jÃ¡ em andamento, aguardando...")
                     delay(CHECK_INTERVAL_MS)
                     continue
                 }
@@ -157,61 +157,61 @@ class AppRestartMonitorService : Service() {
                 if (commandInfo != null) {
                     val commandId = commandInfo.id
                     
-                    // Verifica se este comando já foi processado nesta sessão
+                    // Verifica se este comando jÃ¡ foi processado nesta sessÃ£o
                     if (commandId != null && processedCommandIds.contains(commandId)) {
-                        Log.d(TAG, "ℹ️ Comando já foi processado nesta sessão, ignorando...")
+                        Log.d(TAG, "â„¹ï¸ Comando jÃ¡ foi processado nesta sessÃ£o, ignorando...")
                         delay(CHECK_INTERVAL_MS)
                         continue
                     }
                     
-                    Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                    Log.d(TAG, "⚠️⚠️⚠️ COMANDO DE REINICIAR APP ENCONTRADO! ⚠️⚠️⚠️")
-                    Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                    Log.d(TAG, "âš ï¸âš ï¸âš ï¸ COMANDO DE REINICIAR APP ENCONTRADO! âš ï¸âš ï¸âš ï¸")
+                    Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                     
-                    // Marca que está reiniciando
+                    // Marca que estÃ¡ reiniciando
                     isRestarting = true
                     
-                    // Obtém o app configurado
+                    // ObtÃ©m o app configurado
                     val preferenceManager = PreferenceManager(this@AppRestartMonitorService)
                     val targetPackageName = preferenceManager.getTargetPackageName()
                     
                     if (targetPackageName.isNullOrEmpty()) {
-                        Log.w(TAG, "Nenhum app configurado. Não é possível reiniciar.")
-                        // Marca como executado mesmo assim para não ficar em loop
+                        Log.w(TAG, "Nenhum app configurado. NÃ£o Ã© possÃ­vel reiniciar.")
+                        // Marca como executado mesmo assim para nÃ£o ficar em loop
                         val marked = supabaseManager.markCommandAsExecutedById(commandId)
                         if (marked) {
-                            Log.d(TAG, "✅ Comando marcado como executado (sem app configurado)")
+                            Log.d(TAG, "âœ… Comando marcado como executado (sem app configurado)")
                             if (commandId != null) processedCommandIds.add(commandId)
                         } else {
-                            Log.e(TAG, "❌ Falha ao marcar comando como executado!")
+                            Log.e(TAG, "âŒ Falha ao marcar comando como executado!")
                         }
                         isRestarting = false
                     } else {
                         Log.d(TAG, "App configurado: $targetPackageName")
                         
-                        // CRÍTICO: Marca como executado ANTES de reiniciar
-                        // Isso garante que mesmo se o app reiniciar, o comando já está marcado
-                        Log.d(TAG, "📝 Marcando comando como executado no Supabase...")
+                        // CRÃTICO: Marca como executado ANTES de reiniciar
+                        // Isso garante que mesmo se o app reiniciar, o comando jÃ¡ estÃ¡ marcado
+                        Log.d(TAG, "ðŸ“ Marcando comando como executado no Supabase...")
                         val marked = supabaseManager.markCommandAsExecutedById(commandId)
                         
                         if (!marked) {
-                            Log.e(TAG, "❌ FALHA CRÍTICA: Não foi possível marcar comando como executado!")
-                            Log.e(TAG, "⚠️ Tentando deletar comando como alternativa...")
+                            Log.e(TAG, "âŒ FALHA CRÃTICA: NÃ£o foi possÃ­vel marcar comando como executado!")
+                            Log.e(TAG, "âš ï¸ Tentando deletar comando como alternativa...")
                             // Tenta deletar como alternativa
                             val deleted = supabaseManager.deleteCommandById(commandId)
                             if (!deleted) {
-                                Log.e(TAG, "❌ Também falhou ao deletar comando. Abortando reinício.")
+                                Log.e(TAG, "âŒ TambÃ©m falhou ao deletar comando. Abortando reinÃ­cio.")
                                 delay(ERROR_RETRY_DELAY_MS)
                                 isRestarting = false
                                 continue
                             } else {
-                                Log.d(TAG, "✅ Comando deletado como alternativa")
+                                Log.d(TAG, "âœ… Comando deletado como alternativa")
                             }
                         } else {
-                            Log.d(TAG, "✅ Comando marcado como executado com sucesso!")
+                            Log.d(TAG, "âœ… Comando marcado como executado com sucesso!")
                         }
                         
-                        // Adiciona à lista de comandos processados
+                        // Adiciona Ã  lista de comandos processados
                         if (commandId != null) {
                             processedCommandIds.add(commandId)
                         }
@@ -220,41 +220,41 @@ class AppRestartMonitorService : Service() {
                         delay(2000) // Aguarda 2 segundos para garantir que foi salvo no banco
                         val stillHasCommand = supabaseManager.getRestartAppCommand(deviceId)
                         if (stillHasCommand != null && stillHasCommand.id == commandId) {
-                            Log.w(TAG, "⚠️ Comando ainda aparece como pendente após processar!")
-                            Log.w(TAG, "⚠️ Tentando deletar como fallback...")
+                            Log.w(TAG, "âš ï¸ Comando ainda aparece como pendente apÃ³s processar!")
+                            Log.w(TAG, "âš ï¸ Tentando deletar como fallback...")
                             supabaseManager.deleteCommandById(commandId)
                             delay(1000)
                         }
                         
                         // Reinicia o app
-                        Log.d(TAG, "🔄 Reiniciando app: $targetPackageName")
+                        Log.d(TAG, "ðŸ”„ Reiniciando app: $targetPackageName")
                         val appLauncher = AppLauncher(this@AppRestartMonitorService)
                         val success = appLauncher.restartApp(targetPackageName)
                         
                         if (success) {
-                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                            Log.d(TAG, "✅✅✅ APP REINICIADO COM SUCESSO! ✅✅✅")
-                            Log.d(TAG, "✅ Comando foi executado e marcado como executado no banco")
-                            Log.d(TAG, "ℹ️ Não reiniciará novamente até que um NOVO comando seja criado")
-                            Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                            Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
+                            Log.d(TAG, "âœ…âœ…âœ… APP REINICIADO COM SUCESSO! âœ…âœ…âœ…")
+                            Log.d(TAG, "âœ… Comando foi executado e marcado como executado no banco")
+                            Log.d(TAG, "â„¹ï¸ NÃ£o reiniciarÃ¡ novamente atÃ© que um NOVO comando seja criado")
+                            Log.d(TAG, "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”")
                         } else {
-                            Log.e(TAG, "❌ Falha ao reiniciar app: $targetPackageName")
+                            Log.e(TAG, "âŒ Falha ao reiniciar app: $targetPackageName")
                         }
                         
-                        // Libera flag de reinício após um tempo
+                        // Libera flag de reinÃ­cio apÃ³s um tempo
                         delay(5000) // Aguarda 5 segundos antes de liberar
                         isRestarting = false
                     }
                 } else {
-                    Log.d(TAG, "ℹ️ Nenhum comando de reiniciar app pendente")
-                    // Se não há comando, reseta flag de reinício (caso tenha ficado travada)
+                    Log.d(TAG, "â„¹ï¸ Nenhum comando de reiniciar app pendente")
+                    // Se nÃ£o hÃ¡ comando, reseta flag de reinÃ­cio (caso tenha ficado travada)
                     if (isRestarting) {
-                        Log.w(TAG, "⚠️ Flag de reinício estava travada, resetando...")
+                        Log.w(TAG, "âš ï¸ Flag de reinÃ­cio estava travada, resetando...")
                         isRestarting = false
                     }
                 }
                 
-                // Aguarda antes da próxima verificação
+                // Aguarda antes da prÃ³xima verificaÃ§Ã£o
                 delay(CHECK_INTERVAL_MS)
                 
             } catch (e: Exception) {
@@ -267,13 +267,13 @@ class AppRestartMonitorService : Service() {
     
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "⚠️ AppRestartMonitorService destruído - tentando reiniciar...")
+        Log.d(TAG, "âš ï¸ AppRestartMonitorService destruÃ­do - tentando reiniciar...")
         
-        // Sempre tenta reiniciar o serviço para garantir que sempre esteja rodando
+        // Sempre tenta reiniciar o serviÃ§o para garantir que sempre esteja rodando
         serviceScope.launch {
             try {
                 delay(1000) // Aguarda 1 segundo
-                Log.d(TAG, "🔄 Reiniciando AppRestartMonitorService...")
+                Log.d(TAG, "ðŸ”„ Reiniciando AppRestartMonitorService...")
                 val restartIntent = Intent(this@AppRestartMonitorService, AppRestartMonitorService::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(restartIntent)
@@ -281,7 +281,7 @@ class AppRestartMonitorService : Service() {
                     startService(restartIntent)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao tentar reiniciar serviço: ${e.message}", e)
+                Log.e(TAG, "Erro ao tentar reiniciar serviÃ§o: ${e.message}", e)
             }
         }
         
@@ -290,9 +290,9 @@ class AppRestartMonitorService : Service() {
     
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Log.d(TAG, "⚠️ App removido da lista de tarefas - mas serviço continua rodando")
+        Log.d(TAG, "âš ï¸ App removido da lista de tarefas - mas serviÃ§o continua rodando")
         
-        // Reinicia o serviço imediatamente quando o app é removido
+        // Reinicia o serviÃ§o imediatamente quando o app Ã© removido
         val restartIntent = Intent(this, AppRestartMonitorService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(restartIntent)

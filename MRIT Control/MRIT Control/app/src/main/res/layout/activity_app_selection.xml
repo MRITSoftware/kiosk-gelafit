@@ -5,7 +5,7 @@
     android:background="@drawable/background_gradient"
     android:padding="16dp">
 
-    <!-- Header com título -->
+    <!-- Header com tÃ­tulo -->
     <LinearLayout
         android:id="@+id/headerLayout"
         android:layout_width="match_parent"
@@ -70,7 +70,7 @@
         android:clipToPadding="false"
         android:elevation="4dp" />
 
-    <!-- Rodapé com copyright -->
+    <!-- RodapÃ© com copyright -->
     <LinearLayout
         android:id="@+id/footerLayout"
         android:layout_width="match_parent"

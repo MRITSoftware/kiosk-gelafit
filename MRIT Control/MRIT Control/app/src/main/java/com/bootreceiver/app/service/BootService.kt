@@ -1,4 +1,4 @@
-package com.bootreceiver.app.service
+﻿package com.bootreceiver.app.service
 
 import android.app.Service
 import android.content.Context
@@ -141,35 +141,7 @@ class BootService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
-        Log.d(TAG, "⚠️ BootService destruído - tentando reiniciar após alguns segundos...")
-        
-        // Auto-restart após alguns segundos
-        serviceScope.launch {
-            try {
-                delay(3000) // Aguarda 3 segundos antes de reiniciar
-                Log.d(TAG, "🔄 Reiniciando BootService...")
-                val restartIntent = Intent(this@BootService, BootService::class.java)
-                startService(restartIntent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao tentar reiniciar serviço: ${e.message}", e)
-            }
-        }
-    }
-    
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        Log.d(TAG, "⚠️ App removido da lista de tarefas - reiniciando BootService...")
-        
-        // Reinicia o serviço após alguns segundos
-        serviceScope.launch {
-            try {
-                delay(2000) // Aguarda 2 segundos
-                val restartIntent = Intent(this@BootService, BootService::class.java)
-                startService(restartIntent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao reiniciar serviço após task removed: ${e.message}", e)
-            }
-        }
+        Log.d(TAG, "BootService destruído")
     }
     
     companion object {

@@ -1,4 +1,4 @@
-package com.bootreceiver.app.service
+﻿package com.bootreceiver.app.service
 
 import android.app.ActivityManager
 import android.app.Notification
@@ -166,15 +166,15 @@ class AppBlockingService : Service() {
                     if (foregroundPackage != targetPackage && !allowedPackages.contains(foregroundPackage)) {
                         Log.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         Log.w(TAG, "🚫 APP NÃO AUTORIZADO DETECTADO: $foregroundPackage")
-                        Log.w(TAG, "🔄 Fechando app não autorizado e mostrando tela do control...")
+                        Log.w(TAG, "🔄 Fechando e reabrindo app configurado...")
                         Log.w(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
                         
                         // Fecha o app não autorizado
                         closeApp(foregroundPackage)
                         
-                        // Aguarda um pouco e abre a tela do control (não o app diretamente)
+                        // Aguarda um pouco e reabre o app configurado
                         delay(500)
-                        openControlScreen()
+                        openConfiguredApp(targetPackage)
                     }
                 }
                 
@@ -265,65 +265,25 @@ class AppBlockingService : Service() {
         }
     }
     
-    /**
-     * Abre a tela do control (GelaFitWorkspaceActivity) ao invés do app diretamente
-     */
-    private fun openControlScreen() {
-        try {
-            val intent = Intent(this, GelaFitWorkspaceActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-            startActivity(intent)
-            Log.d(TAG, "✅ Tela do control aberta")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Erro ao abrir tela do control: ${e.message}", e)
-        }
-    }
-    
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "⚠️ AppBlockingService destruído - tentando reiniciar após alguns segundos...")
+        Log.d(TAG, "⚠️ AppBlockingService destruído")
         isRunning = false
-        
-        // Auto-restart após alguns segundos
-        serviceScope.launch {
-            try {
-                delay(3000) // Aguarda 3 segundos antes de reiniciar
-                Log.d(TAG, "🔄 Reiniciando AppBlockingService...")
-                val restartIntent = Intent(this@AppBlockingService, AppBlockingService::class.java).apply {
-                    putExtra("is_active", isActive)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(restartIntent)
-                } else {
-                    startService(restartIntent)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao tentar reiniciar serviço: ${e.message}", e)
-            }
-        }
     }
     
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.d(TAG, "⚠️ App removido da lista de tarefas - mas serviço continua rodando")
         
-        // Reinicia o serviço após alguns segundos
-        serviceScope.launch {
-            try {
-                delay(2000) // Aguarda 2 segundos
-                val restartIntent = Intent(this@AppBlockingService, AppBlockingService::class.java).apply {
-                    putExtra("is_active", isActive)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(restartIntent)
-                } else {
-                    startService(restartIntent)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Erro ao reiniciar serviço após task removed: ${e.message}", e)
+        // Reinicia o serviço se is_active ainda estiver ativo
+        if (isActive) {
+            val restartIntent = Intent(this, AppBlockingService::class.java).apply {
+                putExtra("is_active", true)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(restartIntent)
+            } else {
+                startService(restartIntent)
             }
         }
     }

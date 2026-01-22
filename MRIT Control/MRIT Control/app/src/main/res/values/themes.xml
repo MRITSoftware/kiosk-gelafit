@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.BootReceiver" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">#1E3A8A</item>

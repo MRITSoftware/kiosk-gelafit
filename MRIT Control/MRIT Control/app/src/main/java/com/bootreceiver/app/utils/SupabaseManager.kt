@@ -1,4 +1,4 @@
-package com.bootreceiver.app.utils
+﻿package com.bootreceiver.app.utils
 
 import android.util.Log
 import io.github.jan.supabase.SupabaseClient
@@ -300,7 +300,7 @@ class SupabaseManager {
     /**
      * Registra ou atualiza um dispositivo na tabela devices
      * 
-     * @param deviceId ID único do dispositivo
+     * @param deviceId ID único do dispositivo (Android ID)
      * @param unitName Nome da unidade (email ou nome personalizado)
      * @return true se o registro foi bem-sucedido
      */
@@ -308,48 +308,7 @@ class SupabaseManager {
         try {
             Log.d(TAG, "Registrando dispositivo: $deviceId com nome: $unitName")
             
-            // Se unitName (email) foi fornecido, verifica se já existe outro dispositivo com esse email
-            var deviceWithSameEmail: Device? = null
-            if (unitName != null && unitName.isNotBlank()) {
-                try {
-                    // Busca dispositivo existente com o mesmo email
-                    val existingDevicesByEmail = client.from("devices")
-                        .select(columns = Columns.ALL) {
-                            filter {
-                                eq("unit_name", unitName)
-                            }
-                        }
-                        .decodeList<Device>()
-                    
-                    // Se encontrou dispositivo com o mesmo email mas device_id diferente, sobrescreve
-                    deviceWithSameEmail = existingDevicesByEmail.firstOrNull { it.device_id != deviceId }
-                    
-                    if (deviceWithSameEmail != null) {
-                        Log.d(TAG, "Email já existe no dispositivo ${deviceWithSameEmail.device_id}. Sobrescrevendo...")
-                        
-                        // Remove o email do dispositivo antigo (ou pode deletar se preferir)
-                        // Aqui vamos apenas limpar o email do dispositivo antigo
-                        try {
-                            client.from("devices")
-                                .update(mapOf("unit_name" to null as String?)) {
-                                    filter {
-                                        eq("device_id", deviceWithSameEmail.device_id)
-                                    }
-                                }
-                            Log.d(TAG, "Email removido do dispositivo antigo ${deviceWithSameEmail.device_id}")
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Erro ao remover email do dispositivo antigo: ${e.message}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    if (!e.message?.contains("No rows") == true && 
-                        !e.message?.contains("not found") == true) {
-                        Log.w(TAG, "Erro ao verificar email existente: ${e.message}")
-                    }
-                }
-            }
-            
-            // Verifica se o dispositivo já existe pelo device_id
+            // Verifica se o dispositivo já existe
             var existingDevice: Device? = null
             try {
                 existingDevice = client.from("devices")
@@ -359,11 +318,11 @@ class SupabaseManager {
                         }
                     }
                     .decodeSingle<Device>()
-                Log.d(TAG, "Dispositivo encontrado no banco pelo device_id")
+                Log.d(TAG, "Dispositivo encontrado no banco")
             } catch (e: Exception) {
                 if (e.message?.contains("No rows") == true || 
                     e.message?.contains("not found") == true) {
-                    Log.d(TAG, "Dispositivo não encontrado pelo device_id, será criado novo registro")
+                    Log.d(TAG, "Dispositivo não encontrado, será criado novo registro")
                 } else {
                     Log.w(TAG, "Erro ao verificar dispositivo existente: ${e.message}")
                 }

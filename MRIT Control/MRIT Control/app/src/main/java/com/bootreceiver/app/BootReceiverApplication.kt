@@ -12,11 +12,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Application class para inicialização global do app
- * Útil para configurações que precisam ser feitas antes de qualquer Activity
+ * Application class para inicializaÃ§Ã£o global do app
+ * Ãštil para configuraÃ§Ãµes que precisam ser feitas antes de qualquer Activity
  * 
  * IMPORTANTE: Esta classe garante que o BroadcastReceiver seja registrado
- * quando o app é aberto pela primeira vez.
+ * quando o app Ã© aberto pela primeira vez.
  */
 class BootReceiverApplication : Application() {
     
@@ -24,7 +24,7 @@ class BootReceiverApplication : Application() {
         super.onCreate()
         Log.d(TAG, "BootReceiverApplication iniciado")
         
-        // Força o registro do receiver ao abrir o app
+        // ForÃ§a o registro do receiver ao abrir o app
         // Isso garante que o receiver esteja ativo mesmo em Android 10+
         try {
             val pm = packageManager
@@ -33,7 +33,7 @@ class BootReceiverApplication : Application() {
                 "com.bootreceiver.app.receiver.BootReceiver"
             )
             
-            // Verifica se o receiver está habilitado
+            // Verifica se o receiver estÃ¡ habilitado
             val state = pm.getComponentEnabledSetting(componentName)
             if (state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED ||
                 state == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER) {
@@ -47,13 +47,13 @@ class BootReceiverApplication : Application() {
             
             Log.d(TAG, "Receiver verificado e habilitado")
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao verificar receiver: ${e.message}", e)
+            Log.e(TAG, "Erro ao verificar receiver: ", e)
         }
         
         // Atualiza registro do dispositivo no Supabase (atualiza last_seen)
         updateDeviceRegistration()
         
-        // Inicia o serviço principal de monitoramento de app (sempre roda em background)
+        // Inicia o serviÃ§o principal de monitoramento de app (sempre roda em background)
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 val appMonitorIntent = Intent(this, com.bootreceiver.app.service.AppMonitorService::class.java)
@@ -64,11 +64,11 @@ class BootReceiverApplication : Application() {
                 }
                 Log.d(TAG, "AppMonitorService iniciado")
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao iniciar AppMonitorService: ${e.message}", e)
+                Log.e(TAG, "Erro ao iniciar AppMonitorService: ", e)
             }
         }, 500) // Delay de 500ms para iniciar rapidamente
         
-        // Inicia o serviço de monitoramento de comandos de reiniciar app
+        // Inicia o serviÃ§o de monitoramento de comandos de reiniciar app
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 val monitorIntent = Intent(this, com.bootreceiver.app.service.AppRestartMonitorService::class.java)
@@ -79,11 +79,11 @@ class BootReceiverApplication : Application() {
                 }
                 Log.d(TAG, "AppRestartMonitorService iniciado")
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao iniciar AppRestartMonitorService: ${e.message}", e)
+                Log.e(TAG, "Erro ao iniciar AppRestartMonitorService: ", e)
             }
-        }, 1000) // Delay de 1 segundo para garantir inicialização completa
+        }, 1000) // Delay de 1 segundo para garantir inicializaÃ§Ã£o completa
         
-        // Inicia o serviço de monitoramento de modo kiosk
+        // Inicia o serviÃ§o de monitoramento de modo kiosk
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 val kioskIntent = Intent(this, com.bootreceiver.app.service.KioskModeService::class.java)
@@ -94,21 +94,21 @@ class BootReceiverApplication : Application() {
                 }
                 Log.d(TAG, "KioskModeService iniciado")
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao iniciar KioskModeService: ${e.message}", e)
+                Log.e(TAG, "Erro ao iniciar KioskModeService: ", e)
             }
         }, 2000) // Delay de 2 segundos
     }
     
     /**
      * Atualiza o registro do dispositivo no Supabase (atualiza last_seen)
-     * Isso é feito sempre que o app inicia para manter o dispositivo sincronizado
+     * Isso Ã© feito sempre que o app inicia para manter o dispositivo sincronizado
      */
     private fun updateDeviceRegistration() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val preferenceManager = PreferenceManager(this@BootReceiverApplication)
                 
-                // Só atualiza se o dispositivo já foi registrado (tem email)
+                // SÃ³ atualiza se o dispositivo jÃ¡ foi registrado (tem email)
                 if (preferenceManager.isDeviceRegistered()) {
                     val deviceId = DeviceIdManager.getDeviceId(this@BootReceiverApplication)
                     val unitName = preferenceManager.getUnitName()
@@ -121,10 +121,10 @@ class BootReceiverApplication : Application() {
                         Log.w(TAG, "Falha ao atualizar registro do dispositivo")
                     }
                 } else {
-                    Log.d(TAG, "Dispositivo ainda não foi registrado. Será registrado na primeira abertura do app.")
+                    Log.d(TAG, "Dispositivo ainda nÃ£o foi registrado. SerÃ¡ registrado na primeira abertura do app.")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao atualizar registro do dispositivo: ${e.message}", e)
+                Log.e(TAG, "Erro ao atualizar registro do dispositivo: ", e)
             }
         }
     }

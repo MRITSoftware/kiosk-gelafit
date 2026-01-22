@@ -1,4 +1,4 @@
-package com.bootreceiver.app.ui
+﻿package com.bootreceiver.app.ui
 
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -56,12 +56,14 @@ class AppSelectionActivity : AppCompatActivity() {
             return
         }
         
-        // Se já estiver configurado, abre a área de trabalho do GelaFit Control
+        // Se já estiver configurado, fecha esta activity e abre o app configurado
         if (preferenceManager.isConfigured()) {
-            Log.d(TAG, "App já configurado. Abrindo área de trabalho...")
-            val intent = Intent(this, GelaFitWorkspaceActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            startActivity(intent)
+            Log.d(TAG, "App já configurado. Abrindo app configurado...")
+            val targetPackage = preferenceManager.getTargetPackageName()
+            if (targetPackage != null) {
+                val appLauncher = com.bootreceiver.app.utils.AppLauncher(this)
+                appLauncher.launchApp(targetPackage)
+            }
             finish()
             return
         }
@@ -331,7 +333,7 @@ class AppSelectionActivity : AppCompatActivity() {
     }
     
     /**
-     * Salva o app selecionado e abre a área de trabalho do GelaFit Control
+     * Salva o app selecionado e fecha a activity
      */
     private fun selectApp(packageName: String, appName: String) {
         Log.d(TAG, "App selecionado: $appName ($packageName)")
@@ -341,17 +343,14 @@ class AppSelectionActivity : AppCompatActivity() {
         
         Toast.makeText(
             this,
-            "App configurado: $appName\nAbrindo área de trabalho...",
-            Toast.LENGTH_SHORT
+            "App configurado: $appName\nO app será aberto automaticamente no próximo boot.",
+            Toast.LENGTH_LONG
         ).show()
         
-        // Aguarda um pouco e abre a área de trabalho
+        // Aguarda um pouco e fecha a activity
         listView.postDelayed({
-            val intent = Intent(this, GelaFitWorkspaceActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            startActivity(intent)
             finish()
-        }, 1000)
+        }, 2000)
     }
     
     /**

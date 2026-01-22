@@ -1,4 +1,4 @@
-package com.bootreceiver.app.service
+﻿package com.bootreceiver.app.service
 
 import android.app.ActivityManager
 import android.app.Notification
